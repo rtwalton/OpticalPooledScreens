@@ -533,6 +533,24 @@ def join_stacks(*args):
         
     return output
 
+
+def max_project_zstack(data,slices=5):
+    """Condense z-stack into a single slice using a simple maximum project through 
+    all slices for each channel individually"""
+    data = np.array(data)
+    channels = int(data.shape[-3]/slices)
+    # assert data.ndim == int(slices)*channels, 'Input data must have leading dimension length slices*channels'
+
+    maxed = []
+    for ch in range(channels):
+        ch_slices = data[(ch*slices):((ch+1)*slices)]
+        ch_maxed = np.amax(ch_slices,axis=0)
+        maxed.append(ch_maxed)
+
+    maxed = np.array(maxed)
+
+    return maxed
+
 # SCIKIT-IMAGE
 def regionprops(labeled, intensity_image):
     """Supplement skimage.measure.regionprops with additional field `intensity_image_full` 
