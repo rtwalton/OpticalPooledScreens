@@ -4,14 +4,14 @@ import numpy as np
 import pandas as pd
 
 
-def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.):
+def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.,snake_remap=False):
     """Adds global x and y coordinates to a dataframe with 
     columns indicating (i, j) or (x, y) positions. 
     """
     
     df = df.copy()
     wt = list(zip(df['well'], df['tile']))
-    d = {(w,t): plate_coordinate(w, t, well_spacing, grid_spacing, grid_shape) for w,t in set(wt)}
+    d = {(w,t): plate_coordinate(w, t, well_spacing, grid_spacing, grid_shape,snake_remap) for w,t in set(wt)}
     y, x = zip(*[d[k] for k in wt])
 
     if 'x' in df:
@@ -28,7 +28,7 @@ def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.):
     return df
 
 
-def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape):
+def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape,snake_remap=False):
     """Returns global plate coordinate (i,j) in microns for a tile in a well. 
     The position is based on:
     `well_spacing` microns
@@ -51,6 +51,9 @@ def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape):
         delta = 640
     else:
         delta = grid_spacing
+
+    if snake_remap:
+        tile = int(remap_snake(tile,grid_shape))
 
     row, col = well_to_row_col(well)
     i, j = row * well_spacing, col * well_spacing
