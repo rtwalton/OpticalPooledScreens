@@ -63,6 +63,12 @@ def annotate_points(df, value, ij=('i', 'j'), width=3, shape=(1024, 1024)):
     """Create a mask with pixels at coordinates `ij` set to `value` from 
     dataframe `df`. 
     """
+
+    if shape=='1x1':
+        shape = (2048,2048)
+    elif shape=='2x2':
+        shape = (1024,1024)
+        
     ij = df[list(ij)].values
     n = ij.shape[0]
     mask = np.zeros(shape, dtype=df[value].dtype)
