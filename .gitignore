@@ -9,6 +9,7 @@ ops_lasagna.egg-info/
 
 notebooks/
 figures/
+libraries/
 
 !example_data/
 example_data/*
