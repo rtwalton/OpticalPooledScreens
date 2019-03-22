@@ -71,9 +71,16 @@ class Snake():
     @staticmethod
     def _align_by_DAPI(data_1, data_2, channel_index=0, upsample_factor=2):
         """Align the second image to the first, using the channel at position 
-        `channel_index`. The first channel is usually DAPI.
+        `channel_index`. If channel_index is a tuple of length 2, specifies channels of [data_1,data_2] 
+        to use for alignment.The first channel is usually DAPI.
         """
-        images = data_1[channel_index], data_2[channel_index]
+        if isinstance(channel_index,tuple):
+        	assert len(channel_index)==2, 'channel_index must either by an integer or tuple of length 2'
+        	channel_index_1,channel_index_2 = channel_index
+        else:
+        	channel_index_1,channel_index_2 = (channel_index,)*2
+
+        images = data_1[channel_index_1], data_2[channel_index_2]
         _, offset = ops.process.Align.calculate_offsets(images, upsample_factor=upsample_factor)
         offsets = [offset] * len(data_2)
         aligned = ops.process.Align.apply_offsets(data_2, offsets)
