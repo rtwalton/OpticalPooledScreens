@@ -38,14 +38,18 @@ def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape,snake_re
     `grid_shape` (# rows, # columns)  
     """
     tile = int(tile)
-    if well_spacing.upper() == '96W':
+    if isinstance(well_spacing,int):
+    	well_spacing = well_spacing
+    elif well_spacing.upper() == '96W':
         well_spacing = 9000
     elif well_spacing.upper() == '24W':
         well_spacing = 19300
     elif well_spacing.upper() == '6W':
         well_spacing = 39120
         
-    if grid_spacing.upper() == '10X':
+    if isinstance(grid_spacing,int):
+    	delta = grid_spacing
+    elif grid_spacing.upper() == '10X':
         delta = 1280
     elif grid_spacing.upper() == '20X':
         delta = 640
@@ -55,7 +59,7 @@ def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape,snake_re
     if snake_remap:
         tile = int(remap_snake(tile,grid_shape))
 
-    row, col = well_to_row_col(well)
+    row, col = well_to_row_col(well,mit=True)
     i, j = row * well_spacing, col * well_spacing
 
     height, width = grid_shape
