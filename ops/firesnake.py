@@ -87,7 +87,7 @@ class Snake():
         return aligned
 
     @staticmethod
-    def _segment_nuclei(data, threshold, area_min, area_max):
+    def _segment_nuclei(data, threshold, area_min, area_max,**kwargs):
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape (CHANNEL, I, J).
         """
@@ -99,8 +99,8 @@ class Snake():
         else:
             dapi = data
 
-        kwargs = dict(threshold=lambda x: threshold, 
-            area_min=area_min, area_max=area_max)
+        kwargs.update(dict(threshold=lambda x: threshold, 
+            area_min=area_min, area_max=area_max))
 
         # skimage precision warning
         with warnings.catch_warnings():
