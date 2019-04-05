@@ -59,7 +59,8 @@ def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape,snake_re
     if snake_remap:
         tile = int(remap_snake(tile,grid_shape))
 
-    row, col = well_to_row_col(well,mit=True)
+    row, col = well_to_row_col(well, mit=True)
+
     i, j = row * well_spacing, col * well_spacing
 
     height, width = grid_shape

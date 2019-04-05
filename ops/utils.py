@@ -1,4 +1,5 @@
 import functools
+import multiprocessing
 
 from string import Formatter
 from itertools import product
@@ -240,12 +241,11 @@ def expand_sep(df, col, sep=','):
      .assign(**{col: values}))
 
 
-def csv_frame(files_or_search):
+def csv_frame(files_or_search, tqdn=False):
     """Convenience function, pass either a list of files or a 
     glob wildcard search term.
     """
     from natsort import natsorted
-    import pandas as pd
     
     def read_csv(f):
         try:
@@ -258,7 +258,30 @@ def csv_frame(files_or_search):
     else:
         files = files_or_search
 
-    return pd.concat([read_csv(f) for f in files], sort=True)
+    if tqdn:
+        from tqdm import tqdm_notebook as tqdn
+        return pd.concat([read_csv(f) for f in tqdn(files)], sort=True)
+    else:
+        return pd.concat([read_csv(f) for f in files], sort=True)
+
+
+def apply_parallel(grouped, func, index_name='index', cpu_count=None, tqdn=True):
+    if cpu_count is None:
+        cpu_count = multiprocessing.cpu_count()
+
+
+    with multiprocessing.Pool(cpu_count) as p:
+        names, work = zip(*grouped)
+
+        if tqdn:
+            from tqdm import tqdm_notebook as tqdn
+            results = list(tqdn(p.imap(func, work), total=len(work)))
+        else:
+            results = list(p.imap(func, work), total=len(work))
+
+    results = [x.assign(**{index_name: n}).set_index(index_name) 
+                for n, x in zip(names, results)]
+    return pd.concat(results)
 
 
 # NUMPY
@@ -325,7 +348,7 @@ def make_tiles(arr, m, n, pad=None):
     tiled = []
     for x in np.array_split(arr[:h_, :w_], m_, axis=-2):
         for y in np.array_split(x, n_, axis=-1):
-            result.append(y)
+            tiled.append(y)
     
     return tiled
 
