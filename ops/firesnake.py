@@ -133,6 +133,29 @@ class Snake():
         return cells
 
     @staticmethod
+    def _segment_cells_tubulin(data, nuclei, threshold):
+        """Segment cells from aligned data. Matches cell labels to nuclei labels.
+        Note that labels can be skipped, for example if cells are touching the 
+        image boundary.
+        """
+        if data.ndim == 2:
+            # no DAPI, min over cycles, mean over channels
+            mask = data[1] > threshold
+        else:
+            mask = data > threshold
+
+        try:
+            # skimage precision warning
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                cells = ops.process.find_cells(nuclei, mask)
+        except ValueError:
+            print('segment_cells error -- no cells')
+            cells = nuclei
+
+        return cells
+
+    @staticmethod
     def _transform_log(data, sigma=1, skip_index=None):
         """Apply Laplacian-of-Gaussian filter from scipy.ndimage.
         Use `skip_index` to skip transforming a channel (e.g., DAPI with `skip_index=0`).
