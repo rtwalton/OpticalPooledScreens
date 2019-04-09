@@ -309,13 +309,13 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1,
                                   replace=False))
     df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'))
 
-    # dets = df_initial.query('score > 0.3')['determinant']
-    # d0, d1 = dets.min(), dets.max()
-    # delta = (d1 - d0)
-    # d0 -= delta * 1.5
-    # d1 += delta * 1.5
+    dets = df_initial.query('score > 0.3')['determinant']
+    d0, d1 = dets.min(), dets.max()
+    delta = (d1 - d0)
+    d0 -= delta * 1.5
+    d1 += delta * 1.5
 
-    d0, d1 = 1.125, 1.186
+    # d0, d1 = 1.125, 1.186
     gate = '@d0 <= determinant <= @d1 & score > 0.1'
 
     alignments = [df_initial.query(gate)]
