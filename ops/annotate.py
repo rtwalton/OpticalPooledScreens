@@ -1,13 +1,15 @@
-from ops.constants import *
-import ops.filenames
-import ops
 import numpy as np
-import ops.io
+import pandas as pd
 import skimage.morphology
 import warnings
 import os
 import PIL.Image
 import PIL.ImageFont
+
+from ops.constants import *
+import ops.filenames
+import ops
+import ops.io
 
 
 # load font
@@ -203,4 +205,39 @@ def add_rect_bounds(df, width=10, ij='ij', bounds_col='bounds'):
     for i,j in df[list(ij)].values.astype(int):
         arr.append((i - width, j - width, i + width, j + width))
     return df.assign(**{bounds_col: arr})
+
+
+# BASE LABELING
+
+colors = (0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 0, 1), (0, 1, 1)
+GRMC = build_discrete_lut(colors)
+
+"""
+labels = (df_reads
+ .pipe(add_base_codes)
+ .pipe(label_bases)
+ )
+
+data = read('process/10X_A1_Tile-7.log.tif')
+labeled = join_stacks(data, (labels[:, None], '.a'))
+
+luts = GRAY, GREEN, RED, MAGENTA, CYAN, base_lut 
+save('test/labeled', labeled, luts=luts)
+"""
+
+def add_base_codes(df_reads, offset=1):
+    bases = 'GTAC'
+    n = len(df_reads['barcode'].iloc[0])
+    df = (df_reads['barcode'].str.extract('(.)'*n)
+          .applymap(bases.index)
+          .rename(columns=lambda x: 'c{0}'.format(x+1))
+         )
+    return pd.concat([df_reads, df + offset], axis=1)
+
+def label_bases(df_reads):
+    n = len(df_reads['barcode'].iloc[0])
+    cycles = ['c{0}'.format(i+1) for i in range(n)]
+    labels = np.array([annotate_points(df_reads, c) for c in cycles])
+    return labels
+
 
