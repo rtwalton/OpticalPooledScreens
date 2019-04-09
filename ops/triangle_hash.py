@@ -315,7 +315,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
     # d0 -= delta * 1.5
     # d1 += delta * 1.5
 
-    d0, d1 = det_limit
+    d0, d1 = det_range
 
     gate = '@d0 <= determinant <= @d1 & score > 0.1'
 
