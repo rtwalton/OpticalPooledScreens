@@ -303,11 +303,32 @@ def plot_alignments(df_ph, df_sbs, df_align, site):
 
 def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.186),
                         initial_sites=6, batch_size=180):
-    """Provide triangles from one well only.
+    """Provide triangles from one well only. intitial_sites can be a list of tuples with pre-determined
+    matching pairs of sites [(tile_0,site_0),...]
     """
-    sites = list(np.random.choice(df_info_1.index, size=initial_sites, 
-                                  replace=False))
-    df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'))
+
+    def work_on(df_t, df_s):
+        rotation, translation, score = evaluate_match(df_t, df_s)
+        determinant = None if rotation is None else np.linalg.det(rotation)
+        result = pd.Series({'rotation': rotation, 
+                            'translation': translation, 
+                            'score': score, 
+                            'determinant': determinant})
+        return result
+
+    if isinstance(initial_sites,list):
+        arr = []
+        for tile,site in initial_sites:
+            result = work_on(df_0.query('tile==@tile'),df_1.query('site==@site'))
+            result.at['site']=site
+            result.at['tile']=tile
+            arr.append(result)
+            
+        df_initial = pd.DataFrame(arr)
+    else:
+        sites = list(np.random.choice(df_info_1.index, size=initial_sites, 
+                                      replace=False))
+        df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'))
 
     # dets = df_initial.query('score > 0.3')['determinant']
     # d0, d1 = dets.min(), dets.max()
@@ -322,15 +343,6 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
     alignments = [df_initial.query(gate)]
 
     #### iteration
-
-    def work_on(df_t, df_s):
-        rotation, translation, score = evaluate_match(df_t, df_s)
-        determinant = None if rotation is None else np.linalg.det(rotation)
-        result = pd.Series({'rotation': rotation, 
-                            'translation': translation, 
-                            'score': score, 
-                            'determinant': determinant})
-        return result
 
     batch_size = 180
 
