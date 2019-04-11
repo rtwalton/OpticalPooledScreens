@@ -246,10 +246,10 @@ def parallel_process(func, args_list, n_jobs, tqdn=True):
     return Parallel(n_jobs=n_jobs)(delayed(func)(*w) for w in work)
 
 
-def merge_sbs_phenotype(df_sbs_, df_ph_, model):
+def merge_sbs_phenotype(df_0_, df_1_, model):
 
-    X = df_sbs_[['i', 'j']].values
-    Y = df_ph_[['i', 'j']].values
+    X = df_0_[['i', 'j']].values
+    Y = df_1_[['i', 'j']].values
     Y_pred = model.predict(X)
 
     threshold = 2
@@ -257,17 +257,17 @@ def merge_sbs_phenotype(df_sbs_, df_ph_, model):
     distances = cdist(Y, Y_pred)
     ix = distances.argmin(axis=1)
     filt = distances.min(axis=1) < threshold
-    columns = {'site': 'site', 'cell_ph': 'cell_ph',
-              'i': 'i_ph', 'j': 'j_ph',}
+    columns = {'site': 'site', 'cell': 'cell_1',
+              'i': 'i_1', 'j': 'j_1',}
 
     cols_final = ['well', 'tile', 'cell', 'i', 'j', 
-                  'site', 'cell_ph', 'i_ph', 'j_ph', 'distance'] 
-    sbs = df_sbs_.iloc[ix[filt]].reset_index(drop=True)
-    return (df_ph_
+                  'site', 'cell_1', 'i_1', 'j_1', 'distance'] 
+    target = df_0_.iloc[ix[filt]].reset_index(drop=True)
+    return (df_1_
      [filt].reset_index(drop=True)
      [list(columns.keys())]
      .rename(columns=columns)
-     .pipe(lambda x: pd.concat([sbs, x], axis=1))
+     .pipe(lambda x: pd.concat([target, x], axis=1))
      .assign(distance=distances.min(axis=1)[filt])
      [cols_final]
     )
