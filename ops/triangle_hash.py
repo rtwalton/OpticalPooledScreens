@@ -300,9 +300,8 @@ def plot_alignments(df_ph, df_sbs, df_align, site):
     
     return ax
 
-
 def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.186),
-                        initial_sites=6, batch_size=180):
+                        initial_sites=8, batch_size=180):
     """Provide triangles from one well only. intitial_sites can be a list of tuples with pre-determined
     matching pairs of sites [(tile_0,site_0),...]
     """
@@ -326,8 +325,10 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
             
         df_initial = pd.DataFrame(arr)
     else:
-        sites = list(np.random.choice(df_info_1.index, size=initial_sites, 
-                                      replace=False))
+        sites = (pd.Series(df_info_1.index)
+            .sample(initial_sites, replace=False, random_state=0)
+            .pipe(list))
+
         df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'))
 
     # dets = df_initial.query('score > 0.3')['determinant']

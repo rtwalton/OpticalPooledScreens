@@ -226,11 +226,18 @@ def vpipe(df, f, *args, **kwargs):
                  columns=df.columns, index=df.index)
 
 
-def cast_cols(df, int_cols=tuple(), str_cols=tuple()):
+def cast_cols(df, int_cols=tuple(), float_cols=tuple(), str_cols=tuple()):
     return (df
            .assign(**{c: df[c].astype(int) for c in int_cols})
+           .assign(**{c: df[c].astype(float) for c in float_cols})
            .assign(**{c: df[c].astype(str) for c in str_cols})
            )
+
+
+def replace_cols(df, **kwargs):
+    return (df
+           .assign(**{k: lambda x: x[k].apply(v) 
+                      for k,v in kwargs.items()}))
 
 
 def expand_sep(df, col, sep=','):
