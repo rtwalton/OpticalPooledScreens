@@ -257,16 +257,18 @@ def merge_sbs_phenotype(df_0_, df_1_, model):
     distances = cdist(Y, Y_pred)
     ix = distances.argmin(axis=1)
     filt = distances.min(axis=1) < threshold
-    columns = {'site': 'site', 'cell': 'cell_1',
+    columns_0 = {'tile': 'tile', 'cell': 'cell_0',
+              'i': 'i_0', 'j': 'j_0',}
+    columns_1 = {'site': 'site', 'cell': 'cell_1',
               'i': 'i_1', 'j': 'j_1',}
 
-    cols_final = ['well', 'tile', 'cell', 'i', 'j', 
+    cols_final = ['well', 'tile', 'cell_0', 'i_0', 'j_0', 
                   'site', 'cell_1', 'i_1', 'j_1', 'distance'] 
-    target = df_0_.iloc[ix[filt]].reset_index(drop=True)
+    target = df_0_.iloc[ix[filt]].reset_index(drop=True).rename(columns=columns_0)
     return (df_1_
      [filt].reset_index(drop=True)
-     [list(columns.keys())]
-     .rename(columns=columns)
+     [list(columns_1.keys())]
+     .rename(columns=columns_1)
      .pipe(lambda x: pd.concat([target, x], axis=1))
      .assign(distance=distances.min(axis=1)[filt])
      [cols_final]
