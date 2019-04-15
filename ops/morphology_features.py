@@ -1,7 +1,8 @@
 
 import mahotas 
+import numpy as np
 from astropy.stats import median_absolute_deviation
-from ops.features import correlate_channels, masked
+from ops.features import correlate_channels_masked, masked
 
 def mahotas_zernike(region):
     mfeat = mahotas.features.zernike_moments(region.intensity_image_full[channel], radius = 9, degree=9)
@@ -21,22 +22,22 @@ features_nuclear = {
     'dapi_nuclear_75': lambda r: np.percentile(masked(r, 0),75),
     'dapi_nuclear_max'   : lambda r: masked(r, 0).max(),
     'dapi_nuclear_int'   : lambda r: masked(r, 0).sum(),
-    'dapi_nuclear_sd': lambda r: np.std(masked(r,channel)),
-    'dapi_nuclear_mad': lambda r: median_absolute_deviation(masked(r,channel)),
+    'dapi_nuclear_sd': lambda r: np.std(masked(r,0)),
+    'dapi_nuclear_mad': lambda r: median_absolute_deviation(masked(r,0)),
     'dapi_zernike_nuclear': lambda r: mahotas_zernike(masked(r,0)),
     'dapi_pftas_nuclear': lambda r: mahotas_pftas(masked(r,0)),
-    'channel_nuclear_min': lambda r: np.min(masked(r,channel)),
-    'channel_nuclear_25': lambda r: np.percentile(masked(r, channel),25),
-    'channel_nuclear_mean' : lambda r: masked(r, channel).mean(),
-    'channel_nuclear_median' : lambda r: np.median(masked(r, channel)),
-    'channel_nuclear_75': lambda r: np.percentile(masked(r, channel),75),
-    'channel_nuclear_max'    : lambda r: masked(r, channel).max(),
-    'channel_nuclear_int'    : lambda r: masked(r, channel).sum(),
-    'channel_nuclear_sd': lambda r: np.std(masked(r,channel)),
-    'channel_nuclear_mad': lambda r: median_absolute_deviation(masked(r,channel)),     
-    'channel_zernike_nuclear': lambda r: mahotas_zernike(masked(r,channel)),
-    'channel_pftas_nuclear': lambda r: mahotas_pftas(masked(r,channel)),
-    'dapi_channel_corr_nuclear': lambda r: correlate_channels(np.array([masked(r,i) for i in range(2)]),0,1),
+    'channel_nuclear_min': lambda r: np.min(masked(r,1)),
+    'channel_nuclear_25': lambda r: np.percentile(masked(r, 1),25),
+    'channel_nuclear_mean' : lambda r: masked(r, 1).mean(),
+    'channel_nuclear_median' : lambda r: np.median(masked(r, 1)),
+    'channel_nuclear_75': lambda r: np.percentile(masked(r, 1),75),
+    'channel_nuclear_max'    : lambda r: masked(r, 1).max(),
+    'channel_nuclear_int'    : lambda r: masked(r, 1).sum(),
+    'channel_nuclear_sd': lambda r: np.std(masked(r,1)),
+    'channel_nuclear_mad': lambda r: median_absolute_deviation(masked(r,1)),     
+    'channel_zernike_nuclear': lambda r: mahotas_zernike(masked(r,1)),
+    'channel_pftas_nuclear': lambda r: mahotas_pftas(masked(r,1)),
+    'dapi_channel_corr_nuclear': lambda r: correlate_channels_masked(r,0,1),
     'area_nuclear'       : lambda r: r.area,
     'perimeter_nuclear' : lambda r: r.perimeter,
     'eccentricity_nuclear' : lambda r: r.eccentricity, #cell
@@ -53,19 +54,19 @@ features_nuclear = {
 
 
 features_cell = {
-    'channel_cell_min': lambda r: np.min(masked(r,channel)),
-    'channel_cell_25': lambda r: np.percentile(masked(r, channel),25),
-    'channel_cell_mean' : lambda r: masked(r, channel).mean(),
-    'channel_cell_median' : lambda r: np.median(masked(r, channel)),
-    'channel_cell_75': lambda r: np.percentile(masked(r, channel),75),
-    'channel_cell_max'    : lambda r: masked(r, channel).max(),
-    'channel_cell_int'    : lambda r: masked(r, channel).sum(),
-    'channel_cell_sd': lambda r: np.std(masked(r,channel)),
-    'channel_cell_mad': lambda r: median_absolute_deviation(masked(r,channel)),    
-    'channel_zernike_cell': lambda r: mahotas_zernike(masked(r,channel)),
-    'channel_pftas_cell': mahotas_pftas(masked(r,channel)),
+    'channel_cell_min': lambda r: np.min(masked(r,1)),
+    'channel_cell_25': lambda r: np.percentile(masked(r, 1),25),
+    'channel_cell_mean' : lambda r: masked(r, 1).mean(),
+    'channel_cell_median' : lambda r: np.median(masked(r, 1)),
+    'channel_cell_75': lambda r: np.percentile(masked(r, 1),75),
+    'channel_cell_max'    : lambda r: masked(r, 1).max(),
+    'channel_cell_int'    : lambda r: masked(r, 1).sum(),
+    'channel_cell_sd': lambda r: np.std(masked(r,1)),
+    'channel_cell_mad': lambda r: median_absolute_deviation(masked(r,1)),    
+    'channel_zernike_cell': lambda r: mahotas_zernike(masked(r,1)),
+    'channel_pftas_cell': mahotas_pftas(masked(r,1)),
     'dapi_cell_median'    : lambda r: np.median(masked(r, 0)),
-    'dapi_channel_corr_cell': lambda r: correlate_channels(np.array([masked(r,i) for i in range(2)]),0,1),
+    'dapi_channel_corr_cell': lambda r: correlate_channels_masked(r,0,1),
     'area_cell'       : lambda r: r.area,
     'perimeter_cell' : lambda r: r.perimeter,
     'euler_cell' : lambda r: r.euler_number,
