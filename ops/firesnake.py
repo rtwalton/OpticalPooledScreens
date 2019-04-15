@@ -404,7 +404,7 @@ class Snake():
     @staticmethod
     def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards, channel):
         
-        from ops.morphology_features import *
+        import ops.morphology_features
         # def masked(region, index):
         #     return region.intensity_image_full[index][region.filled_image]
 
