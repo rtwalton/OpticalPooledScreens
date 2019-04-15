@@ -46,7 +46,9 @@ features_nuclear = {
     'hu_moments_nuclear': lambda r: r.moments_hu,
     'solidity_nuclear': lambda r: r.solidity,
     'extent_nuclear': lambda r: r.extent,
-    'cell'               : lambda r: r.label
+    'cell'               : lambda r: r.label,
+    'i'       : lambda r: r.centroid[0],
+    'j'       : lambda r: r.centroid[1]
 }
 
 
@@ -74,6 +76,7 @@ features_cell = {
     'hu_moments_cell': lambda r: r.moments_hu,
     'solidity_cell': lambda r: r.solidity,
     'extent_cell': lambda r: r.extent,
-    'cell'               : lambda r: r.label
+    'cell'               : lambda r: r.label,
+    'bounds': lambda r: r.bbox
     #Luke:add more dapi cell features?
 }
