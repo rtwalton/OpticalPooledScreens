@@ -402,6 +402,22 @@ class Snake():
         return Snake._extract_features(labels, labels, wildcards, features_geom)
 
     @staticmethod
+    def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards, channel):
+        
+        from ops.morphology_features import *
+        # def masked(region, index):
+        #     return region.intensity_image_full[index][region.filled_image]
+
+        df_n =  Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
+        df_c =  Snake._extract_features(data_phenotype, cells, wildcards, ops.morphology_features.features_cell) 
+
+        df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
+                .reset_index())
+
+        return df
+
+
+    @staticmethod
     def _analyze_single(data, alignment_ref, cells, peaks, 
                         threshold_peaks, wildcards, channel_ix=1):
         if alignment_ref.ndim == 3:
