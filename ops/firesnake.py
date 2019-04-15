@@ -161,9 +161,9 @@ class Snake():
         Note that labels can be skipped, for example if cells are touching the 
         image boundary.
         """
-        if data.ndim == 2:
+        if data.ndim > 2:
             # no DAPI, min over cycles, mean over channels
-            mask = data[1] > threshold
+            mask = data[...,1,:,:] > threshold
         else:
             mask = data > threshold
 
@@ -303,7 +303,7 @@ class Snake():
             .pipe(ops.in_situ.call_cells))
 
     @staticmethod
-    def _extract_features(data, labels, wildcards, features=None):
+    def _extract_features(data, labels, wildcards, features=None,**kwargs):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -408,7 +408,9 @@ class Snake():
         # def masked(region, index):
         #     return region.intensity_image_full[index][region.filled_image]
 
-        df_n =  Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
+        df_n =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
+                 .drop(columns=list(wildcards.keys()))
+                )
         df_c =  Snake._extract_features(data_phenotype, cells, wildcards, ops.morphology_features.features_cell) 
 
         df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
