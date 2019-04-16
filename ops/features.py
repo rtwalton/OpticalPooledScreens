@@ -24,6 +24,23 @@ def correlate_channels(r, first, second):
 def masked(r, index):
     return r.intensity_image_full[index][r.filled_image]
 
+def correlate_channels_masked(r, first, second):
+    """Cross-correlation between non-zero pixels. 
+    Uses `first` and `second` to index channels from `r.intensity_image_full`.
+    """
+    A = masked(r,first)
+    B = masked(r, second)
+
+    filt = A > 0
+    if filt.sum() == 0:
+        return np.nan
+
+    A = A[filt]
+    B  = B[filt]
+    corr = (A - A.mean()) * (B - B.mean()) / (A.std() * B.std())
+
+    return corr.mean()
+
 
 # FEATURES
 # these functions expect an `skimage.measure.regionprops` region as input
