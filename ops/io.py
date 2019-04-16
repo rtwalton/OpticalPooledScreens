@@ -36,7 +36,7 @@ def read_lut(lut_string):
 GLASBEY = read_lut(ops.constants.GLASBEY_INVERTED)
 
 
-def grid_view(files, bounds, padding=40, with_mask=False):
+def grid_view(files, bounds, padding=40, with_mask=False,im_func=None):
     """Mask is 1-indexed, zero indicates background.
     """
     padding = int(padding)
@@ -47,7 +47,10 @@ def grid_view(files, bounds, padding=40, with_mask=False):
         try:
             I = Is[filename]
         except KeyError:
-            I = read_stack(filename, copy=False) 
+            if im_func is not None:
+                I = im_func(read_stack(filename, copy=False))
+            else:
+                I = read_stack(filename, copy=False) 
             Is[filename] = I
         I_cell = ops.utils.subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
