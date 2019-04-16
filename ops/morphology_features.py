@@ -79,7 +79,7 @@ features_cell = {
     'euler_cell' : lambda r: r.euler_number,
     'eccentricity_cell' : lambda r: r.eccentricity, #cell
     'major_axis_cell' : lambda r: r.major_axis_length, #cell
-    'minor_axis_cell' : lambda r: r.minor_axis_length, #cell
+    # 'minor_axis_cell' : lambda r: r.minor_axis_length, #cell
     'orientation_cell' : lambda r: r.orientation,
     'hu_moments_cell': lambda r: r.moments_hu,
     'solidity_cell': lambda r: r.solidity,
