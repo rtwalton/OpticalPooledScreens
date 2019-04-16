@@ -402,7 +402,7 @@ class Snake():
         return Snake._extract_features(labels, labels, wildcards, features_geom)
 
     @staticmethod
-    def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards, channel):
+    def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards):
         
         import ops.morphology_features
         # def masked(region, index):
