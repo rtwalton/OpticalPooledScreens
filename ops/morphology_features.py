@@ -11,12 +11,12 @@ def masked_rect(r,index):
 
 def mahotas_zernike(r,channel):
     image = masked_rect(r,channel)
-    mfeat = mahotas.features.zernike_moments(image.astype('int32'), radius = 9, degree=9)
+    mfeat = mahotas.features.zernike_moments(image.astype(np.uint32), radius = 9, degree=9)
     return mfeat
 
 def mahotas_pftas(r,channel):
     image = masked_rect(r,channel)
-    mfeat = mahotas.features.pftas(image.astype('int32'))
+    mfeat = mahotas.features.pftas(image.astype(np.uint32))
     ### according to this, at least as good as haralick/zernike and much faster:
     ### https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-110
     return mfeat
