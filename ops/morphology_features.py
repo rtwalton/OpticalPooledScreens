@@ -4,11 +4,18 @@ import numpy as np
 from astropy.stats import median_absolute_deviation
 from ops.features import correlate_channels_masked, masked
 
-def mahotas_zernike(image):
+def masked_rect(r,index):
+    image = r.intensity_image_full[index]
+    mask = r.filled_image
+    return np.multiply(image,mask)
+
+def mahotas_zernike(r,channel):
+    image = masked_rect(r,channel)
     mfeat = mahotas.features.zernike_moments(image.astype('int32'), radius = 9, degree=9)
     return mfeat
 
-def mahotas_pftas(image):
+def mahotas_pftas(r,channel):
+    image = masked_rect(r,channel)
     mfeat = mahotas.features.pftas(image.astype('int32'))
     ### according to this, at least as good as haralick/zernike and much faster:
     ### https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-110
@@ -24,8 +31,8 @@ features_nuclear = {
     'dapi_nuclear_int'   : lambda r: masked(r, 0).sum(),
     'dapi_nuclear_sd': lambda r: np.std(masked(r,0)),
     'dapi_nuclear_mad': lambda r: median_absolute_deviation(masked(r,0)),
-    'dapi_zernike_nuclear': lambda r: mahotas_zernike(masked(r,0)),
-    'dapi_pftas_nuclear': lambda r: mahotas_pftas(masked(r,0)),
+    'dapi_zernike_nuclear': lambda r: mahotas_zernike(r,0),
+    'dapi_pftas_nuclear': lambda r: mahotas_pftas(r,0),
     'channel_nuclear_min': lambda r: np.min(masked(r,1)),
     'channel_nuclear_25': lambda r: np.percentile(masked(r, 1),25),
     'channel_nuclear_mean' : lambda r: masked(r, 1).mean(),
@@ -35,8 +42,8 @@ features_nuclear = {
     'channel_nuclear_int'    : lambda r: masked(r, 1).sum(),
     'channel_nuclear_sd': lambda r: np.std(masked(r,1)),
     'channel_nuclear_mad': lambda r: median_absolute_deviation(masked(r,1)),     
-    'channel_zernike_nuclear': lambda r: mahotas_zernike(masked(r,1)),
-    'channel_pftas_nuclear': lambda r: mahotas_pftas(masked(r,1)),
+    'channel_zernike_nuclear': lambda r: mahotas_zernike(r,1),
+    'channel_pftas_nuclear': lambda r: mahotas_pftas(r,1),
     'dapi_channel_corr_nuclear': lambda r: correlate_channels_masked(r,0,1),
     'area_nuclear'       : lambda r: r.area,
     'perimeter_nuclear' : lambda r: r.perimeter,
