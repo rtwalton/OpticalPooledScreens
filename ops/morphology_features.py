@@ -5,11 +5,11 @@ from astropy.stats import median_absolute_deviation
 from ops.features import correlate_channels_masked, masked
 
 def mahotas_zernike(image):
-    mfeat = mahotas.features.zernike_moments(image, radius = 9, degree=9)
+    mfeat = mahotas.features.zernike_moments(image.astype(int), radius = 9, degree=9)
     return mfeat
 
 def mahotas_pftas(image):
-    mfeat = mahotas.features.pftas(image)
+    mfeat = mahotas.features.pftas(image.astype(int))
     ### according to this, at least as good as haralick/zernike and much faster:
     ### https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-110
     return mfeat
