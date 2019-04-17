@@ -351,13 +351,24 @@ def montage(arr, shape=None, n_columns=None):
             nr -= 1
     else:
         nr, nc = shape
-    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
 
-    for (r, c), img in zip(product(range(nr), range(nc)), arr):
-        s = [[None] for _ in img.shape]
-        s[-2] = (r * h, r * h + img.shape[-2])
-        s[-1] = (c * w, c * w + img.shape[-1])
-        M[tuple(slice(*x) for x in s)] = img
+    if nc = 1:
+        arr_padded = []
+        for (r, c), img in zip(range(nr), arr):
+            M = np.zeros(img.shape[:-1] + (w,), dtype=arr[0].dtype)
+            s = [[None] for _ in img.shape]
+            s[-2] = (0, img.shape[-2])
+            s[-1] = (0, img.shape[-1])
+            M[tuple(slice(*x) for x in s)] = img
+            arr_padded.append(M)
+        M = np.concatenate(M,axis=0)
+    else:
+        M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
+        for (r, c), img in zip(product(range(nr), range(nc)), arr):
+            s = [[None] for _ in img.shape]
+            s[-2] = (r * h, r * h + img.shape[-2])
+            s[-1] = (c * w, c * w + img.shape[-1])
+            M[tuple(slice(*x) for x in s)] = img
 
     return M
 
