@@ -352,7 +352,7 @@ def montage(arr, shape=None, n_columns=None):
     else:
         nr, nc = shape
 
-    if nc = 1:
+    if nc == 1:
         arr_padded = []
         for (r, c), img in zip(range(nr), arr):
             M = np.zeros(img.shape[:-1] + (w,), dtype=arr[0].dtype)
