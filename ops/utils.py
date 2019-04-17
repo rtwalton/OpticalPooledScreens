@@ -331,7 +331,7 @@ def pile(arr):
     return np.concatenate(arr_out, axis=0)
 
 
-def montage(arr, shape=None):
+def montage(arr, shape=None, n_columns=None):
     """tile ND arrays ([..., height, width]) in last two dimensions
     first N-2 dimensions must match, tiles are expanded to max height and width
     pads with zero, no spacing
@@ -341,6 +341,11 @@ def montage(arr, shape=None):
     h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
     if not shape:
         nr = nc = int(np.ceil(np.sqrt(n)))
+        if (nr - 1) * nc >= n:
+            nr -= 1
+    elif n_columns:
+        nc = n_columns
+        nr = np.ceil(n/nc)
         if (nr - 1) * nc >= n:
             nr -= 1
     else:
