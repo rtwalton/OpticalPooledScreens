@@ -342,7 +342,7 @@ def montage(arr, shape=None, n_columns=None):
 
     if n_columns is not None:
         nc = n_columns
-        nr = int(np.ceil(bn/nc))
+        nr = int(np.ceil(n/nc))
         if (nr - 1) * nc >= n:
             nr -= 1
     elif not shape:
