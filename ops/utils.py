@@ -339,13 +339,14 @@ def montage(arr, shape=None, n_columns=None):
     """
     sz = list(zip(*[img.shape for img in arr]))
     h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
-    if not shape:
-        nr = nc = int(np.ceil(np.sqrt(n)))
-        if (nr - 1) * nc >= n:
-            nr -= 1
-    elif n_columns:
+
+    if n_columns is not None:
         nc = n_columns
         nr = np.ceil(n/nc)
+        if (nr - 1) * nc >= n:
+            nr -= 1
+    elif not shape:
+        nr = nc = int(np.ceil(np.sqrt(n)))
         if (nr - 1) * nc >= n:
             nr -= 1
     else:
