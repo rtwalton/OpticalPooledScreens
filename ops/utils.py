@@ -361,7 +361,7 @@ def montage(arr, shape=None, n_columns=None):
             s[-1] = (0, img.shape[-1])
             M[tuple(slice(*x) for x in s)] = img
             arr_padded.append(M)
-        M = np.concatenate(M,axis=-2)
+        M = np.concatenate(arr_padded,axis=-2)
     else:
         M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
         for (r, c), img in zip(product(range(nr), range(nc)), arr):
