@@ -348,8 +348,8 @@ def montage(arr, shape=None):
             nr -= 1
     elif -1 in shape:
         assert shape[0] != shape[1], 'cannot infer both rows and columns, use shape=None for square montage'
+        shape = np.array(shape)
         infer, given = np.argmin(shape),np.argmax(shape)
-
         shape[infer] = int(np.ceil(n/shape[given]))
         if (shape[infer]-1)*shape[given] >= n:
             shape[infer] -= 1
