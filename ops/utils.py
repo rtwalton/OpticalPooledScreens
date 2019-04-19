@@ -358,8 +358,9 @@ def montage(arr, shape=None):
         nr, nc = shape
 
     if 1 in (nr,nc):
+        assert nr != nc, 'no need to montage a single image'
         shape = np.array((nr,nc))
-        single_axis,other_axis = np.argwhere(shape==1),np.argwhere(shape!=1),
+        single_axis,other_axis = int(np.argwhere(shape==1)),int(np.argwhere(shape!=1))
         arr_padded = []
         for r, img in zip(range(shape[other_axis]), arr):
             sub_h, sub_w = (h,img.shape[-2])[single_axis], (w,img.shape[-1])[other_axis]
