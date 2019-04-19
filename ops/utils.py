@@ -362,12 +362,14 @@ def montage(arr, shape=None):
         shape = np.array((nr,nc))
         single_axis,other_axis = int(np.argwhere(shape==1)),int(np.argwhere(shape!=1))
         arr_padded = []
-        for r, img in zip(range(shape[other_axis]), arr):
-            sub_h, sub_w = (h,img.shape[-2])[single_axis], (w,img.shape[-1])[other_axis]
-            sub = np.zeros(img.shape[:-2] + (sub_h,) + (sub_w,), dtype=arr[0].dtype)
+        current_step = np.array([0,0])
+        for step, img in zip(range(shape[other_axis]), arr):
+            sub_size = (h,img.shape[-2])[single_axis], (w,img.shape[-1])[other_axis]
+            sub = np.zeros(img.shape[:-2] + (sub_size[0],) + (sub_size[1],), dtype=arr[0].dtype)
             s = [[None] for _ in img.shape]
-            s[-2] = (0, img.shape[-2])
-            s[-1] = (0, img.shape[-1])
+            s[-2] = (current_step[0], current_step[0]+img.shape[-2])
+            s[-1] = (current_step[1], current_step[1]+img.shape[-1])
+            current_step[other_axis] += sub_size[other_axis]
             sub[tuple(slice(*x) for x in s)] = img
             arr_padded.append(sub)
         M = np.concatenate(arr_padded,axis=-2)
