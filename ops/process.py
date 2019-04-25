@@ -28,7 +28,12 @@ def feature_table(data, labels, features, global_features=None):
     results = defaultdict(list)
     for region in regions:
         for feature, func in features.items():
-            results[feature].append(func(region))
+            result = func(region)
+            if isinstance(result,list)|isinstance(result,np.ndarray):
+                for index,value in enumerate(result):
+                    results[feature+'_{}'.format(index)].append(value)
+            else:
+                results[feature].append(func(region))
     if global_features:
         for feature, func in global_features.items():
             results[feature] = func(data, labels)
