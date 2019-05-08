@@ -643,6 +643,17 @@ def max_project_zstack(stack,slices=5):
 
     return maxed
 
+def max_project_zstack_temp_2ch(stack):
+"""ONLY WORKS FOR 5 SLICES, 2 CHANNELS TO GET AROUND CURRENT TIFFFILE ISSUES.Condense z-stack into a single slice using a simple maximum project through 
+all slices for each channel individually. If slices is a list, then specifies the number 
+of slices for each channel."""
+
+slices = [[(0,0,:,:),(0,1,:,:),(1,0,:,:),(1,1,:,:),(2,0,:,:)],[(2,1,:,:),(3,0,:,:),(3,1,:,:),(4,0,:,:),(4,1,:,:)]]
+
+maxed = np.array([np.squeeze(np.array(stack[x] for x in ch_slices)).max(axis=0) for ch_slices in slices])
+
+return maxed
+
 # SCIKIT-IMAGE
 def regionprops(labeled, intensity_image):
     """Supplement skimage.measure.regionprops with additional field `intensity_image_full` 
