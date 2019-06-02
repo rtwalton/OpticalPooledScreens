@@ -643,30 +643,30 @@ def max_project_zstack(stack,slices=5):
 
     return maxed
 
-def max_project_zstack_temp_2ch(stack):
-    """ONLY WORKS FOR 5 SLICES, 2 CHANNELS TO GET AROUND CURRENT TIFFFILE ISSUES.Condense z-stack into a single slice using a simple maximum project through 
-    all slices for each channel individually. If slices is a list, then specifies the number 
-    of slices for each channel."""
+# def max_project_zstack_temp_2ch(stack):
+#     """ONLY WORKS FOR 5 SLICES, 2 CHANNELS TO GET AROUND CURRENT TIFFFILE ISSUES.Condense z-stack into a single slice using a simple maximum project through 
+#     all slices for each channel individually. If slices is a list, then specifies the number 
+#     of slices for each channel."""
 
-    slices = [[(0,0,None,None),(0,1,None,None),(1,0,None,None),(1,1,None,None),(2,0,None,None)],
-                [(2,1,None,None),(3,0,None,None),(3,1,None,None),(4,0,None,None),(4,1,None,None)]]
+#     slices = [[(0,0,None,None),(0,1,None,None),(1,0,None,None),(1,1,None,None),(2,0,None,None)],
+#                 [(2,1,None,None),(3,0,None,None),(3,1,None,None),(4,0,None,None),(4,1,None,None)]]
 
-    maxed = np.array([np.squeeze(np.array([stack[x] for x in ch_slices])).max(axis=0) for ch_slices in slices])
+#     maxed = np.array([np.squeeze(np.array([stack[x] for x in ch_slices])).max(axis=0) for ch_slices in slices])
 
-    return maxed
+#     return maxed
 
-def max_project_zstack_temp_3ch(stack):
-    """ONLY WORKS FOR 5 SLICES, UP TO 3 CHANNELS TO GET AROUND CURRENT TIFFFILE ISSUES.Condense z-stack into a single slice using a simple maximum project through 
-    all slices for each channel individually. If slices is a list, then specifies the number 
-    of slices for each channel."""
+# def max_project_zstack_temp_3ch(stack):
+#     """ONLY WORKS FOR 5 SLICES, UP TO 3 CHANNELS TO GET AROUND CURRENT TIFFFILE ISSUES.Condense z-stack into a single slice using a simple maximum project through 
+#     all slices for each channel individually. If slices is a list, then specifies the number 
+#     of slices for each channel."""
 
-    slices = [[(0,0,None,None),(0,1,None,None),(0,2,None,None),(1,0,None,None),(1,1,None,None)],
-                [(1,2,None,None),(2,0,None,None),(2,1,None,None),(2,2,None,None),(3,0,None,None)],
-                [(3,1,None,None),(3,2,None,None),(4,0,None,None),(4,1,None,None),(4,2,None,None)]]
+#     slices = [[(0,0,None,None),(0,1,None,None),(0,2,None,None),(1,0,None,None),(1,1,None,None)],
+#                 [(1,2,None,None),(2,0,None,None),(2,1,None,None),(2,2,None,None),(3,0,None,None)],
+#                 [(3,1,None,None),(3,2,None,None),(4,0,None,None),(4,1,None,None),(4,2,None,None)]]
 
-    maxed = np.array([np.squeeze(np.array([stack[x] for x in ch_slices])).max(axis=0) for ch_slices in slices])
+#     maxed = np.array([np.squeeze(np.array([stack[x] for x in ch_slices])).max(axis=0) for ch_slices in slices])
 
-    return maxed
+#     return maxed
 
 # SCIKIT-IMAGE
 def regionprops(labeled, intensity_image):
