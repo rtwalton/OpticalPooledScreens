@@ -35,6 +35,8 @@ def read_lut(lut_string):
 
 GLASBEY = read_lut(ops.constants.GLASBEY_INVERTED)
 
+def ij_open(image):
+    os.system("open -a 'Fiji' "+image)
 
 def grid_view(files, bounds, padding=40, with_mask=False,im_func=None):
     """Mask is 1-indexed, zero indicates background.
