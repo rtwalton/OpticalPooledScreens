@@ -37,8 +37,8 @@ GLASBEY = read_lut(ops.constants.GLASBEY_INVERTED)
 
 def ij_open(image):
     if isinstance(image,np.ndarray):
-        imsave('temp.tiff',image)
-        os.system("open -a 'Fiji' temp.tiff")
+        save_stack('temp',image)
+        os.system("open -a 'Fiji' temp.tif")
         os.system("rm temp.tiff")
     elif isinstance(image,str):
         os.system("open -a 'Fiji' "+image)
