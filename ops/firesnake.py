@@ -16,6 +16,7 @@ import ops.process
 import ops.io
 import ops.in_situ
 from ops.process import Align
+from scipy.stats import mode
 
 
 class Snake():
@@ -156,22 +157,18 @@ class Snake():
         return cells
 
     @staticmethod
-    def _segment_cells_tubulin(data, nuclei, threshold):
+    def _segment_cells_tubulin(tubulin, nuclei, threshold,**kwargs):
         """Segment cells from aligned data. Matches cell labels to nuclei labels.
         Note that labels can be skipped, for example if cells are touching the 
         image boundary.
         """
-        if data.ndim > 2:
-            # no DAPI, min over cycles, mean over channels
-            mask = data[...,1,:,:] > threshold
-        else:
-            mask = data > threshold
-
+        if len(tubulin)>2:
+            tubulin = tubulin[1]
         try:
             # skimage precision warning
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                cells = ops.process.find_cells(nuclei, mask)
+                cells = ops.process.find_cells_tubulin(nuclei, tubulin, threshold=lambda x:threshold,**kwargs)
         except ValueError:
             print('segment_cells error -- no cells')
             cells = nuclei

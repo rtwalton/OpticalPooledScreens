@@ -85,6 +85,40 @@ def find_cells(nuclei, mask, remove_boundary_cells=True):
 
     return cells.astype(np.uint16)
 
+def find_cells_tubulin(nuclei, tubulin, threshold,radius=15, area_min=10, score=lambda r: r.mean_intensity, 
+                    remove_boundary_cells=True,smooth=2):
+    """Convert binary mask to cell labels, based on nuclei labels.
+
+    Expands labeled nuclei to cells, constrained to where mask is >0.
+    """
+    mask = binarize(tubulin,radius,area_min,equalize=True)
+    labeled = skimage.measure.label(mask)
+    labeled = filter_by_region(labeled, score, threshold, intensity_image=tubulin) > 0
+    filled = ndimage.binary_fill_holes(labeled)
+    difference = skimage.measure.label(filled!=labeled)
+    change = filter_by_region(difference, lambda r: r.area < area_min, 0) > 0
+    labeled[change] = filled[change]
+
+    labeled = labeled + nuclei > 0
+
+    cells = apply_watershed(labeled,smooth=smooth)
+    cells = filter_by_region(cells,lambda r: r.intensity_image.sum(),lambda x: 1,intensity_image=nuclei)
+    # remove cells touching the boundary
+    if remove_boundary_cells:
+        cut = np.concatenate([cells[0,:], cells[-1,:], 
+                              cells[:,0], cells[:,-1]])
+        cells.flat[np.in1d(cells, np.unique(cut))] = 0
+
+    return cells.astype(np.uint16)
+
+def label_erosion(labels):
+    regions = skimage.measure.regionprops(labels, intensity_image=labels)
+    eroded = np.zeros(labels.shape).astype('uint16')
+    for r in regions:
+        eroded[tuple(slice(r.bbox[start],r.bbox[stop]) for start,stop in [(0,2),(1,3)])] += skimage.morphology.erosion(np.pad(r.intensity_image,
+                                                                                                        1,mode='constant'))[1:-1,1:-1]
+
+    return eroded
 
 def find_peaks(data, n=5):
     """Finds local maxima. At a maximum, the value is max - min in a 
