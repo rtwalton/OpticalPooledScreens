@@ -54,7 +54,7 @@ features_nuclear = {
     'hu_moments_nuclear': lambda r: r.moments_hu,
     'solidity_nuclear': lambda r: r.solidity,
     'extent_nuclear': lambda r: r.extent,
-    'cell'               : lambda r: r.label,
+    'nucleus'               : lambda r: r.label,
     'i'       : lambda r: r.centroid[0],
     'j'       : lambda r: r.centroid[1]
 }
