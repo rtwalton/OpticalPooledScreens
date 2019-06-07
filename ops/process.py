@@ -213,12 +213,11 @@ class Align:
 
 # SEGMENT
 def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
-                score=lambda r: r.mean_intensity,
-                smooth=1.35):
+                score=lambda r: r.mean_intensity,smooth=1.35,
+                method='mean'):
     """
     """
-
-    mask = binarize(dapi, radius, area_min)
+    mask = binarize(dapi, radius, area_min, method=method)
     labeled = skimage.measure.label(mask)
     labeled = filter_by_region(labeled, score, threshold, intensity_image=dapi) > 0
 
@@ -236,21 +235,32 @@ def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
     return result
 
 
-def binarize(image, radius, min_size):
+def binarize(image, radius, min_size,method='mean',percentile=0.1,equalize=False,filter=True):
     """Apply local mean threshold to find outlines. Filter out
     background shapes. Otsu threshold on list of region mean intensities will remove a few
     dark cells. Could use shape to improve the filtering.
     """
-    dapi = skimage.img_as_ubyte(image)
     # slower than optimized disk in ImageJ
     # scipy.ndimage.uniform_filter with square is fast but crappy
     selem = skimage.morphology.disk(radius)
-    mean_filtered = skimage.filters.rank.mean(dapi, selem=selem)
-    mask = dapi > mean_filtered
+    if equalize:
+        image = skimage.filters.rank.equalize(image,selem=selem)
+    
+    dapi = skimage.img_as_ubyte(image)
+
+    if method=='otsu':
+        filtered = skimage.filters.rank.otsu(dapi, selem=selem)
+    elif method=='percentile':
+        filtered = skimage.filters.rank.percentile(dapi,selem=selem,p0=percentile)
+    elif filter:
+        filtered = skimage.filters.rank.mean(dapi, selem=selem)
+    else:
+        return dapi
+
+    mask = dapi > filtered
     mask = skimage.morphology.remove_small_objects(mask, min_size=min_size)
 
     return mask
-
 
 def filter_by_region(labeled, score, threshold, intensity_image=None, relabel=True):
     """Apply a filter to label image. The `score` function takes a single region 
