@@ -30,8 +30,11 @@ def feature_table(data, labels, features, global_features=None):
         for feature, func in features.items():
             result = func(region)
             if isinstance(result,list)|isinstance(result,np.ndarray):
-                for index,value in enumerate(result):
-                    results[feature+'_{}'.format(index)].append(value)
+                if len(result)==1:
+                    results[feature].append(result[0])
+                else:
+                    for index,value in enumerate(result):
+                        results[feature+'_{}'.format(index)].append(value)
             else:
                 results[feature].append(func(region))
     if global_features:
