@@ -411,10 +411,20 @@ class Snake():
         df_n =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
                  .drop(columns=list(wildcards.keys()))
                 )
-        df_c =  Snake._extract_features(data_phenotype, cells, wildcards, ops.morphology_features.features_cell) 
 
-        df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
-                .reset_index())
+        df_n_to_c = (Snake._extract_features(cells,nuclei,wildcards,{'cell':lambda r: mode(r.intensity_image[r.intensity_image>0],axis=None).mode})
+                     .rename({'label':'nucleus'},axis=1)
+                     .drop(columns=(list(wildcards.keys())+['i','j','area']))
+                    )
+
+        df_n_full = df_n.merge(df_n_to_c,how='left',on='nucleus')
+
+        df_c =  (Snake
+                 ._extract_features(data_phenotype, cells, wildcards, ops.morphology_features.features_cell)
+                 .drop(columns=['i','j','area','label'])
+                ) 
+
+        df = df_n_full.merge(df_c,how='left',on='cell')
 
         return df
 
