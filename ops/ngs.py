@@ -3,7 +3,7 @@ import numpy as np
 from glob import glob
 from natsort import natsorted
 
-# TODO: from ops.constants import *
+from ops.constants import SUBPOOL
 import ops.utils
 
 def load_hist(filename, threshold):
@@ -75,10 +75,19 @@ def calc_stats(df_hist, df_design):
     )     
 
 
-def identify_pool(df_hist, df_design):
-    cols = [SUBPOOL, 'spots_per_oligo']
+def identify_pool(df_hist, df_design, dataset_is_subpool = False):
+    cols = [SUBPOOL, 'sgRNA','gene_symbol','spots_per_oligo']
+
+    if dataset_is_subpool:
+        #helps if the same sgRNAs are in multiple subpools
+        LEFT_ON = ['dataset','sgRNA']
+        RIGHT_ON = ['subpool','sgRNA']
+    else:
+        LEFT_ON = 'sgRNA'
+        RIGHT_ON = LEFT_ON
+
     return (df_hist
-           .join(df_design.set_index('sgRNA')[cols], on='sgRNA')
+           .merge(df_design[cols],left_on=LEFT_ON,right_on=RIGHT_ON, how='left')
            .pipe(add_design_rank, df_design)
            .sort_values(['dataset', 'plate', 'well', 'sgRNA', 'design_rank'])
            .groupby(['dataset', 'plate', 'well', 'sgRNA']).head(1)
