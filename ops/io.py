@@ -12,7 +12,7 @@ from ops.external.tifffile_new import imread
 # currently needed to save ImageJ-compatible hyperstacks
 from ops.external.tifffile_old import imsave
 from nd2reader import ND2Reader
-from tqdm import tqdm_notebook as tqdn
+# from tqdm import tqdm_notebook as tqdn
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
@@ -63,7 +63,7 @@ def nd2_to_tif(file,mag='10X',zproject=False):
 
         well_metadata = []
 
-        for site,image in tqdn(zip(images.metadata['fields_of_view'],images)):
+        for site,image in zip(images.metadata['fields_of_view'],images):
             if zproject:
                 image = image.max(axis=1)
             filename = ops.filenames.name_file(description,site=str(site))
