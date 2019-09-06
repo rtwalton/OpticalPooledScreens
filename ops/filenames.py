@@ -81,10 +81,16 @@ def name_file(description, **more_description):
     # if value is None, key is removed
     d = {k: v for k,v in d.items() if v is not None}
 
+    channels = [ch for key,ch in d.items() if key.startswith('channel')]
+
     if 'cycle' in d:
         d['first'] = '{mag}_{cycle}_{well}'.format(**d)
     else:
         d['first'] = '{mag}_{well}'.format(**d)
+
+
+    if len(channels)>0:
+        d['middle'] = '-'.join(channels)
 
     # positions can be called either tile or site (e.g., tiles are in physical order
     # and sites are in acquisition order)
@@ -92,13 +98,17 @@ def name_file(description, **more_description):
         d['pos'] = 'Tile-{0}'.format(d['tile'])
     elif 'site' in d:
         d['pos'] = 'Site-{0}'.format(d['site'])
-    else:
-        d['pos'] = None
+    # else:
+    #     d['pos'] = None
 
     formats = [
+        '{first}_{middle}_{pos}.{tag}.{ext}',
         '{first}_{pos}.{tag}.{ext}',
+        '{first}_{middle}_{pos}.{ext}',
         '{first}_{pos}.{ext}',
+        '{first}_{middle}.{tag}.{ext}',
         '{first}.{tag}.{ext}',
+        '{first}_{middle}.{ext}',
         '{first}.{ext}',
     ]
 

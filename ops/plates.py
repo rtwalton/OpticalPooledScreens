@@ -4,6 +4,15 @@ import numpy as np
 import pandas as pd
 
 
+def to_pixel_xy(df):
+
+    x_0,y_0 = (df.iloc[0].x,df.iloc[0].y)
+    df['x_px'] = df.apply(lambda row:(row.x-x_0)/row.pixel_size,axis=1)
+    df['y_px'] = df.apply(lambda row:(row.y-y_0)/row.pixel_size,axis=1)
+
+    return df
+
+
 def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.,snake_remap=False):
     """Adds global x and y coordinates to a dataframe with 
     columns indicating (i, j) or (x, y) positions. 
