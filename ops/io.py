@@ -81,6 +81,18 @@ def nd2_to_tif(file,mag='10X',zproject=False):
         metadata_filename = ops.filenames.name_file(description,tag='metadata',ext='pkl')
         pd.DataFrame(well_metadata).to_pickle(metadata_filename)
 
+def tile_config(df,output_filename):
+    """Generate tile configuration file from site position dataframe for use with FIJI grid collection stitching
+    """
+    config = ['dim = 2\n\n']
+    df = df.pipe(ops.plates.to_pixel_xy)
+    for filename,x,y in zip(df.filename.tolist(),df.x_px.tolist(),df.y_px.tolist()):
+        config.append(filename+"; ; ("+str(y)+", "+str(-x)+")\n")
+    f = open(output_filename,'x')
+    f.writelines(config)
+    f.close()
+
+
 def ij_open(image):
     if isinstance(image,np.ndarray):
         save_stack('temp',image)
