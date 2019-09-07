@@ -3,6 +3,7 @@ import os
 import time
 from urllib.parse import urlparse
 from glob import glob
+from natsort import natsorted
 
 from ops.constants import FILE
 
@@ -81,7 +82,7 @@ def name_file(description, **more_description):
     # if value is None, key is removed
     d = {k: v for k,v in d.items() if v is not None}
 
-    channels = [ch for key,ch in d.items() if key.startswith('channel')]
+    channels = natsorted([ch for key,ch in d.items() if key.startswith('channel')])
 
     if 'cycle' in d:
         d['first'] = '{mag}_{cycle}_{well}'.format(**d)

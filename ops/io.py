@@ -57,6 +57,11 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
     description['subdir']='preprocess/'+description['cycle']
     description['dataset']=None
 
+    channels = [ch for key,ch in d.items() if key.startswith('channel')]
+    
+    if len(channels)==1:
+        fov_axes='xy'
+
     with ND2Reader(file) as images:
         images.iter_axes='v'
         images.bundle_axes = fov_axes
