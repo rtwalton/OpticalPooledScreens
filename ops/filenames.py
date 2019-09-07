@@ -82,13 +82,12 @@ def name_file(description, **more_description):
     # if value is None, key is removed
     d = {k: v for k,v in d.items() if v is not None}
 
-    channels = natsorted([ch for key,ch in d.items() if key.startswith('channel')])
-
     if 'cycle' in d:
         d['first'] = '{mag}_{cycle}_{well}'.format(**d)
     else:
         d['first'] = '{mag}_{well}'.format(**d)
 
+    channels = [ch for key,ch in natsorted(d.items()) if key.startswith('channel')]
 
     if len(channels)>0:
         d['middle'] = '-'.join(channels)
