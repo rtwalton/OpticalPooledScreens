@@ -38,7 +38,7 @@ def read_lut(lut_string):
 
 GLASBEY = read_lut(ops.constants.GLASBEY_INVERTED)
 
-def nd2_to_tif(file,mag='10X',zproject=False):
+def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
     nd2_file_pattern = [
                 (r'(?P<cycle>c[0-9]+)/'
                 '(?P<dataset>.*)/'
@@ -59,7 +59,7 @@ def nd2_to_tif(file,mag='10X',zproject=False):
 
     with ND2Reader(file) as images:
         images.iter_axes='v'
-        images.bundle_axes = 'czxy'
+        images.bundle_axes = fov_axes
 
         well_metadata = []
 
