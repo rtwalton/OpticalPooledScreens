@@ -55,12 +55,12 @@ def plate_coordinate(well, tile, well_spacing, grid_spacing, grid_shape,snake_re
         well_spacing = 19300
     elif well_spacing.upper() == '6W':
         well_spacing = 39120
-        
+
     if isinstance(grid_spacing,int):
     	delta = grid_spacing
     elif grid_spacing.upper() == '10X':
         delta = 1280
-    elif grid_spacing.upper() == '20X':
+    elif str(grid_spacing).upper() == '20X':
         delta = 640
     else:
         delta = grid_spacing

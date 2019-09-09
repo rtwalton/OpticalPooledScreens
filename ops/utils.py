@@ -81,6 +81,8 @@ def groupby_reduce_concat(gb, *args, **kwargs):
     for arg in args:
         kwargs[arg] = arg
     reductions = {'mean': lambda x: x.mean(),
+                  'min': lambda x: x.min(),
+                  'max': lambda x: x.max(),
                   'median': lambda x: x.median(),
                   'std': lambda x: x.std(),
                   'sem': lambda x: x.sem(),
@@ -98,7 +100,7 @@ def groupby_reduce_concat(gb, *args, **kwargs):
     arr = []
     for name, f in kwargs.items():
         if callable(f):
-            arr += [f(gb).rename(name)]
+            arr += [gb.apply(f).rename(name)]
         else:
             arr += [reductions[f](gb).rename(name)]
 
@@ -211,7 +213,7 @@ def flatten_cols(df, f='underscore'):
     """Flatten column multi index.
     """
     if f == 'underscore':
-        f = lambda x: '_'.join(y for y in x if y)
+        f = lambda x: '_'.join(str(y) for y in x if y != '')
     df = df.copy()
     df.columns = [f(x) for x in df.columns]
     return df
@@ -235,9 +237,13 @@ def cast_cols(df, int_cols=tuple(), float_cols=tuple(), str_cols=tuple()):
 
 
 def replace_cols(df, **kwargs):
-    return (df
-           .assign(**{k: lambda x: x[k].apply(v) 
-                      for k,v in kwargs.items()}))
+    # careful with closure
+    d = {}
+    for k, v in kwargs.items():
+        def f(x, k=k, v=v):
+            return x[k].apply(v)
+        d[k] = f
+    return df.assign(**d)
 
 
 def expand_sep(df, col, sep=','):
@@ -253,7 +259,7 @@ def expand_sep(df, col, sep=','):
      .assign(**{col: values}))
 
 
-def csv_frame(files_or_search, tqdn=False):
+def csv_frame(files_or_search, tqdn=False, **kwargs):
     """Convenience function, pass either a list of files or a 
     glob wildcard search term.
     """
@@ -261,7 +267,7 @@ def csv_frame(files_or_search, tqdn=False):
     
     def read_csv(f):
         try:
-            return pd.read_csv(f)
+            return pd.read_csv(f, **kwargs)
         except pd.errors.EmptyDataError:
             return None
     
