@@ -15,6 +15,7 @@ FILE_PATTERN = [
         r'(MAX_)?(?P<mag>[0-9]+X).',
         r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?',
         r'(?P<well>[A-H][0-9]*)',
+        r'([_-](?P<channel>((DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)*?',
         r'(?:[_-]Site[_-](?P<site>([0-9]+)))?',
         r'(?:_Tile-(?P<tile>([0-9]+)))?',
         r'(?:\.(?P<tag>.*))*\.(?P<ext>.*)']
