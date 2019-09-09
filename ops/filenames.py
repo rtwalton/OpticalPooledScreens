@@ -51,6 +51,10 @@ def parse_filename(filename, custom_patterns=None):
          'ext': 'tif',
          'file': 'example_data/input/10X_c1-SBS-1/10X_c1-SBS-1_A1_Tile-107.max.tif'}
     """
+
+    if isinstance(filename,list):
+        return [parse_filename(file) for file in filename]
+
     filename = normpath(filename)
     # windows
     filename = filename.replace('\\', '/')
