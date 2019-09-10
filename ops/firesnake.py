@@ -31,7 +31,8 @@ class Snake():
         align_within_cycle=True, keep_trailing=False, n=1):
         """Rigid alignment of sequencing cycles and channels. 
 
-        Expects `data` to be an array with dimensions (CYCLE, CHANNEL, I, J).
+        Expects `data` to be an array with dimensions (CYCLE, CHANNEL, I, J). 'n' 
+        determines the first SBS channel in 'data'.
         A centered subset of data is used if `window` is greater 
         than one. Subpixel alignment is done if `upsample_factor` is greater than
         one (can be slow).
@@ -63,7 +64,7 @@ class Snake():
                                 window=window, upsample_factor=upsample_factor)
         elif method == 'SBS_mean':
             # calculate cycle offsets using the average of SBS channels
-            target = Align.apply_window(aligned[:, 1:], window=window).max(axis=1)
+            target = Align.apply_window(aligned[:, n:], window=window).max(axis=1)
             normed = Align.normalize_by_percentile(target)
             normed[normed > cutoff] = cutoff
             offsets = Align.calculate_offsets(normed, upsample_factor=upsample_factor)
