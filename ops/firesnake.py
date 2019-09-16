@@ -130,11 +130,11 @@ class Snake():
         """
 
         if isinstance(data, list):
-            dapi = data[0]
+            dapi = data[0].astype(np.uint16)
         elif data.ndim == 3:
-            dapi = data[0]
+            dapi = data[0].astype(np.uint16)
         else:
-            dapi = data
+            dapi = data.astype(np.uint16)
 
         kwargs.update(dict(threshold=lambda x: threshold, 
             area_min=area_min, area_max=area_max))
@@ -168,11 +168,11 @@ class Snake():
         """
         if data.ndim == 4:
             # no DAPI, min over cycles, mean over channels
-            mask = data[:, 1:].min(axis=0).mean(axis=0)
+            mask = data[:, 1:].astype(np.uint16).min(axis=0).mean(axis=0)
         elif data.ndim == 3:
-            mask = np.median(data[1:], axis=0)
+            mask = np.median(data[1:].astype(np.uint16), axis=0)
         elif data.ndim == 2:
-            mask = data
+            mask = data.astype(np.uint16)
         else:
             raise ValueError
 
