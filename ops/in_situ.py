@@ -35,7 +35,7 @@ def format_bases(values, labels, positions, cycles, bases):
     return df
 
 
-def do_median_call(df_bases, cycles=12, channels=4, correction_only_in_cells=False):
+def do_median_call(df_bases, cycles=12, channels=4, correction_quartile=0, correction_only_in_cells=False):
     """Call reads from raw base signal using median correction. Use the 
     `correction_within_cells` flag to specify if correction is based on reads within 
     cells, or all reads.
@@ -43,14 +43,14 @@ def do_median_call(df_bases, cycles=12, channels=4, correction_only_in_cells=Fal
     if correction_only_in_cells:
         # first obtain transformation matrix W
         X_ = dataframe_to_values(df_bases.query('cell > 0'))
-        _, W = transform_medians(X_.reshape(-1, channels))
+        _, W = transform_medians(X_.reshape(-1, channels),correction_quartile=correction_quartile)
 
         # then apply to all data
         X = dataframe_to_values(df_bases)
         Y = W.dot(X.reshape(-1, channels).T).T.astype(int)
     else:
         X = dataframe_to_values(df_bases)
-        Y, W = transform_medians(X.reshape(-1, channels))
+        Y, W = transform_medians(X.reshape(-1, channels),correction_quartile=correction_quartile)
 
     df_reads = call_barcodes(df_bases, Y, cycles=cycles, channels=channels)
 
@@ -104,19 +104,26 @@ def dataframe_to_values(df, value='intensity'):
     return x
 
 
-def transform_medians(X):
+def transform_medians(X,correction_quartile=0):
     """For each dimension, find points where that dimension is max. Use median of those points to define new axes. 
     Describe with linear transformation W so that W * X = Y.
     """
-
-    def get_medians(X):
+    def get_medians(X,correction_quartile):
         arr = []
         for i in range(X.shape[1]):
-            arr += [np.median(X[X.argmax(axis=1) == i], axis=0)]
+            max_spots = X[X.argmax(axis=1) == i]
+            arr += [np.median(max_spots[max_spots[:,i] >= np.quantile(max_spots,axis=0,q=correction_quartile)[i]],axis=0)]
         M = np.array(arr)
         return M
 
-    M = get_medians(X).T
+    # def get_medians(X):
+    #     arr = []
+    #     for i in range(X.shape[1]):
+    #         arr += [np.median(X[X.argmax(axis=1) == i], axis=0)]
+    #     M = np.array(arr)
+    #     return M
+
+    M = get_medians(X,correction_quartile).T
     M = M / M.sum(axis=0)
     W = np.linalg.inv(M)
     Y = W.dot(X.T).T.astype(int)

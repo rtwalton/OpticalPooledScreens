@@ -294,16 +294,19 @@ class Snake():
         return df_bases
 
     @staticmethod
-    def _call_reads(df_bases, peaks=None, correction_only_in_cells=True):
+    def _call_reads(df_bases, correction_quartile=0, peaks=None, correction_only_in_cells=True, subtract_min=False):
         """Median correction performed independently for each tile.
         Use the `correction_only_in_cells` flag to specify if correction
         is based on reads within cells, or all reads.
         """
+        df_bases = df_bases.copy()
         if df_bases is None:
             return
         if correction_only_in_cells:
             if len(df_bases.query('cell > 0')) == 0:
                 return
+        if subtract_min:
+            df_bases['intensity'] = df_bases['intensity'] - df_bases.groupby([WELL,TILE,CELL,READ,CHANNEL])['intensity'].transform('min')
         
         cycles = len(set(df_bases['cycle']))
         channels = len(set(df_bases['channel']))
@@ -311,7 +314,7 @@ class Snake():
         df_reads = (df_bases
             .pipe(ops.in_situ.clean_up_bases)
             .pipe(ops.in_situ.do_median_call, cycles, channels=channels,
-                correction_only_in_cells=correction_only_in_cells)
+                correction_only_in_cells=correction_only_in_cells, correction_quartile=correction_quartile)
             )
 
         if peaks is not None:
