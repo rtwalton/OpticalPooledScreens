@@ -28,7 +28,7 @@ class Snake():
 
     @staticmethod
     def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1,
-        align_within_cycle=True, keep_trailing=False, n=1):
+        align_within_cycle=True, cycle_files=None,keep_trailing=False, n=1):
         """Rigid alignment of sequencing cycles and channels. 
 
         Expects `data` to be an array with dimensions (CYCLE, CHANNEL, I, J). 'n' 
@@ -37,15 +37,46 @@ class Snake():
         than one. Subpixel alignment is done if `upsample_factor` is greater than
         one (can be slow).
         """
-        data = np.array(data)
+        if isinstance(data,list):
+            arr = []
+            # snakemake passes de-nested list of numpy arrays
+            current = 0
+            for cycle in cycle_files:
+                arr.append(np.array(data[current:current+cycle]))
+                current += cycle
+            # for element in data:
+            #     if not isinstance(element,list):
+            #         arr.append(element)
+            #     elif len(element)==1:
+            #         arr.append(element[0])
+            #     else:
+            #         arr.append(np.array(element))
+
+            data = np.array(arr)
+        else:
+            data = np.array(data)
+
         if keep_trailing:
             valid_channels = min([len(x) for x in data])
             data = np.array([x[-valid_channels:] for x in data])
 
-        assert data.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
+        if data.ndim==1:
+            # data stacked with different cycle numbers?
+            # assume extra channels exist are on the first cycle, first channels
+            # does not return extra channels
+            extra = data[0].shape[1] - data[1].shape[0]
+            #stack channels in common
+            stacked = np.concatenate([data[0][:,extra:],np.array([data[cycle] for cycle in range(1,data.shape[0])])],axis=0)
+            #copy extra channels across other cycles
+            stacked = np.concatenate((np.array([data[0][0,:extra]]*8),stacked),axis=1)
+        else:
+            extra = 0
+            stacked = data
+
+        assert stacked.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
 
         # align between SBS channels for each cycle
-        aligned = data.copy()
+        aligned = stacked.copy()
         if align_within_cycle:
             align_it = lambda x: Align.align_within_cycle(x, window=window, upsample_factor=upsample_factor)
             # if data.shape[1] == 4:
@@ -69,7 +100,7 @@ class Snake():
             normed[normed > cutoff] = cutoff
             offsets = Align.calculate_offsets(normed, upsample_factor=upsample_factor)
             # apply cycle offsets to each channel
-            for channel in range(aligned.shape[1]):
+            for channel in range(extra,aligned.shape[1]):
                 aligned[:, channel] = Align.apply_offsets(aligned[:, channel], offsets)
 
         return aligned
@@ -519,6 +550,9 @@ class Snake():
                 for output, result in zip(outputs, results):
                     save_output(output, result, **output_kwargs)
 
+            else:
+                return results 
+
         return functools.update_wrapper(g, f)
 
 
@@ -543,8 +577,9 @@ def load_arg(x):
     """
     one_file = load_file
     many_files = lambda x: [load_file(f) for f in x]
+    nested_files = lambda x: [[load_file(f) for f in f_list] for f_list in x]
     
-    for f in one_file, many_files:
+    for f in one_file, many_files, nested_files:
         try:
             return f(x)
         except (pd.errors.EmptyDataError, TypeError, IOError) as e:
