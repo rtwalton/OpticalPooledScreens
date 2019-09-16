@@ -17,6 +17,7 @@ import ops.io
 import ops.in_situ
 from ops.process import Align
 from scipy.stats import mode
+from ops.constants import *
 
 
 class Snake():
@@ -324,15 +325,19 @@ class Snake():
         return df_reads
 
     @staticmethod
-    def _call_cells(df_reads, q_min=0):
+    def _call_cells(df_reads, df_pool=None,q_min=0):
         """Median correction performed independently for each tile.
         """
         if df_reads is None:
             return
-        
-        return (df_reads
-            .query('Q_min >= @q_min')
-            .pipe(ops.in_situ.call_cells))
+        if df_pool is None:
+            return (df_reads
+                .query('Q_min >= @q_min')
+                .pipe(ops.in_situ.call_cells))
+        else:
+            return (df_reads
+                .query('Q_min >= @q_min')
+                .pipe(ops.in_situ.call_cells_mapping,df_pool))
 
     @staticmethod
     def _extract_features(data, labels, wildcards, features=None,**kwargs):
