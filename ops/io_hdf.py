@@ -47,6 +47,7 @@ def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
     description['ext']='hdf'
     description['mag']=mag
     description['subdir']='preprocess'
+    description['dataset']=None
 
     channels = [ch for key,ch in description.items() if key.startswith('channel')]
 
