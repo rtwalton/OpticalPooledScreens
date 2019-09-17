@@ -63,7 +63,7 @@ def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
         for site,image in zip(images.metadata['fields_of_view'],images):
             if zproject:
             	z_axis = fov_axes.find('z')
-                image = image.max(axis=z_axis)
+            	image = image.max(axis=z_axis)
             filename = ops.filenames.name_file(description,site=str(site))
             save_hdf_image(filename,image[:])
 
