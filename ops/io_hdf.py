@@ -30,7 +30,8 @@ def read_hdf_image(filename,bbox=None,array_name='image'):
 
 def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
     nd2_file_pattern = [
-                (r'Well(?P<well>[A-H][0-9]*)_'
+                (r'(?P<dataset>.*)/'
+                'Well(?P<well>[A-H][0-9]*)_'
                 'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
                 '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
                 '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
