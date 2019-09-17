@@ -52,7 +52,7 @@ def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
     channels = [ch for key,ch in description.items() if key.startswith('channel')]
 
     if len(channels)==1:
-        fov_axes='xy'
+        fov_axes=fov_axes[1:]
 
     with ND2Reader(file) as images:
         images.iter_axes='v'
@@ -62,7 +62,8 @@ def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
 
         for site,image in zip(images.metadata['fields_of_view'],images):
             if zproject:
-                image = image.max(axis=1)
+            	z_axis = fov_axes.find('z')
+                image = image.max(axis=z_axis)
             filename = ops.filenames.name_file(description,site=str(site))
             save_hdf_image(filename,image[:])
 
