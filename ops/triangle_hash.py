@@ -306,6 +306,10 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
                         initial_sites=8, batch_size=180):
     """Provide triangles from one well only. intitial_sites can be a list of tuples with pre-determined
     matching pairs of sites [(tile_0,site_0),...]
+    rotation: rotation matrix
+    translation: translation matrix
+    score: average distance between closest/matched points
+    determinant: determinant of rotation matrix, indicative of scaling
     """
 
     def work_on(df_t, df_s):
@@ -367,7 +371,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
         for ix_0, ix_1 in candidates[:batch_size]:
             work += [[d_0[ix_0], d_1[ix_1]]]    
 
-        df_align_new = (pd.concat(parallel_process(work_on, work, 18), axis=1).T
+        df_align_new = (pd.concat(parallel_process(work_on, work, -2), axis=1).T
          .assign(tile=[t for t, _ in candidates[:batch_size]], 
                  site=[s for _, s in candidates[:batch_size]])
         )
