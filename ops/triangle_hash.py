@@ -195,7 +195,7 @@ def prioritize(df_info_0, df_info_1, matches):
     """
     a = df_info_0.loc[matches[:, 0]].values
     b = df_info_1.loc[matches[:, 1]].values
-    model = RANSACRegressor()
+    model = RANSACRegressor(min_samples=2)
     model.fit(a, b)
 
     # rank all pairs by distance
