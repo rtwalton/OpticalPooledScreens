@@ -450,6 +450,15 @@ class Snake():
         return Snake._extract_features(labels, labels, wildcards, features_geom)
 
     @staticmethod
+    def _extract_simple_nuclear_morphology(data_phenotype, nuclei, wildcards):
+        
+        import ops.morphology_features
+
+        df =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear))
+
+        return df
+
+    @staticmethod
     def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards):
         
         import ops.morphology_features
