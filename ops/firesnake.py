@@ -124,6 +124,16 @@ class Snake():
         offsets = [offset] * len(data_2)
         aligned = ops.process.Align.apply_offsets(data_2, offsets)
         return aligned
+
+    @staticmethod
+    def _stack_channels(data):
+        arr = []
+        for dataset in data:
+            if len(dataset.shape)>2:
+                arr.extend([dataset[...,channel,:,:] for channel in range(dataset.shape[-3])])
+            else:
+                arr.append(dataset)
+        return np.stack(arr,axis=-3)
         
     @staticmethod
     def _segment_nuclei(data, threshold, area_min, area_max,**kwargs):
