@@ -661,7 +661,7 @@ def regionprops(labeled, intensity_image):
     else:
         base_image = intensity_image[..., 0, :, :]
 
-    regions = skimage.measure.regionprops(labeled, intensity_image=base_image)
+    regions = skimage.measure.regionprops(labeled, intensity_image=base_image,coordinates='xy')
 
     for region in regions:
         b = region.bbox
