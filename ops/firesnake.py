@@ -15,6 +15,7 @@ import ops.features
 import ops.process
 import ops.io
 import ops.in_situ
+import ops.io_hdf
 from ops.process import Align
 from scipy.stats import mode
 from ops.constants import *
@@ -618,6 +619,8 @@ def save_output(filename, data, **kwargs):
         return save_pkl(filename, data)
     elif filename.endswith('.csv'):
         return save_csv(filename, data)
+    elif filename.endswith('.hdf'):
+        return save_hdf(filename, data)
     else:
         raise ValueError('not a recognized filetype: ' + f)
 
@@ -638,6 +641,8 @@ def load_pkl(filename):
 def load_tif(filename):
     return ops.io.read_stack(filename)
 
+def load_hdf(filename):
+    return ops.io_hdf.read_hdf_image(filename)
 
 def save_csv(filename, df):
     df.to_csv(filename, index=None)
@@ -654,6 +659,8 @@ def save_tif(filename, data_, **kwargs):
     kwargs['data'] = data_
     ops.io.save_stack(filename, **kwargs)
 
+def save_hdf(filename,data_):
+    ops.io_hdf.save_hdf_image(filename,data_)
 
 def restrict_kwargs(kwargs, f):
     """Partition `kwargs` into two dictionaries based on overlap with default 
@@ -683,6 +690,8 @@ def load_file(filename):
         return load_pkl(filename)
     elif filename.endswith('.csv'):
         return load_csv(filename)
+    elif filename.endswith('.hdf'):
+        return load_hdf(filename)
     else:
         raise IOError(filename)
 

@@ -6,6 +6,7 @@ from nd2reader import ND2Reader
 import pandas as pd
 
 def save_hdf_image(filename,image,pixel_size_um=1,image_metadata=None,array_name='image'):
+	# mkdir if doesn't exist
 	hdf_file = open_file(filename,mode='w')
 	try:
 		hdf_file.create_array('/',array_name,image)
@@ -19,6 +20,8 @@ def save_hdf_image(filename,image,pixel_size_um=1,image_metadata=None,array_name
 def read_hdf_image(filename,bbox=None,array_name='image'):
 	"""reads in image from hdf file with given bbox. significantly (~100x) faster when reading in a
 	100x100 pixel chunk compared to reading in an entire 1480x1480 tif.
+	WARNING: metadata is read into cache on first access; if file metadata changes, re-reading the file will 
+	cause problems. Simple work-around: delete file, try reading in (error), replace with new file, read in.
 	"""
 	hdf_file = open_file(filename,mode='r')
 	try:
@@ -26,7 +29,7 @@ def read_hdf_image(filename,bbox=None,array_name='image'):
 		if bbox is not None:
 			return image_node[...,bbox[0]:bbox[2],bbox[1]:bbox[3]]
 		else:
-			return image_node[:]
+			return image_node[...]
 	except:
 		print('error in reading image array from hdf file')
 	hdf_file.close()
@@ -52,6 +55,7 @@ def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
     channels = [ch for key,ch in description.items() if key.startswith('channel')]
 
     if len(channels)==1:
+    	## this is not great: find if c in fov_axes, etc...
         fov_axes=fov_axes[1:]
 
     with ND2Reader(file) as images:
