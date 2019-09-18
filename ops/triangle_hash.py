@@ -297,15 +297,15 @@ def plot_alignments(df_ph, df_sbs, df_align, site):
         ax.scatter(Y[:, 0], Y[:, 1], s=1, label=tile)
         print(tile)
 
-    ax.set_xlim([-50, 1550])
-    ax.set_ylim([-50, 1550])
+    # ax.set_xlim([-50, 1550])
+    # ax.set_ylim([-50, 1550])
     
     return ax
 
 def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.186),
                         initial_sites=8, batch_size=180):
-    """Provide triangles from one well only. intitial_sites can be a list of tuples with pre-determined
-    matching pairs of sites [(tile_0,site_0),...]
+    """Provide triangles from one well only. Intitial_sites can be a list of tuples with pre-determined
+    matching pairs of sites [(tile_0,site_0),...]. Should be good with 5-8 initial sites.
     rotation: rotation matrix
     translation: translation matrix
     score: average distance between closest/matched points
