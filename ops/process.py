@@ -249,7 +249,8 @@ class Align:
 def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
                 score=lambda r: r.mean_intensity,smooth=1.35,
                 method='mean'):
-    """
+    """radius determines neighborhood for local mean thresholding, 
+    smooth determines gaussian kernel for smoothing prior to watershed.
     """
     mask = binarize(dapi, radius, area_min, method=method)
     labeled = skimage.measure.label(mask)
@@ -269,7 +270,7 @@ def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
     return result
 
 
-def binarize(image, radius, min_size,method='mean',percentile=0.1,equalize=False,filter=True):
+def binarize(image, radius, min_size,method='mean',percentile=0.5,equalize=False,filter=True):
     """Apply local mean threshold to find outlines. Filter out
     background shapes. Otsu threshold on list of region mean intensities will remove a few
     dark cells. Could use shape to improve the filtering.

@@ -136,11 +136,10 @@ class Snake():
         return np.stack(arr,axis=-3)
         
     @staticmethod
-    def _segment_nuclei(data, threshold, area_min, area_max,**kwargs):
+    def _segment_nuclei(data, threshold, area_min, area_max,smooth=1.35,radius=15):
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape (CHANNEL, I, J).
         """
-
         if isinstance(data, list):
             dapi = data[0].astype(np.uint16)
         elif data.ndim == 3:
@@ -148,8 +147,9 @@ class Snake():
         else:
             dapi = data.astype(np.uint16)
 
-        kwargs.update(dict(threshold=lambda x: threshold, 
-            area_min=area_min, area_max=area_max))
+        kwargs = dict(threshold=lambda x: threshold, 
+            area_min=area_min, area_max=area_max, 
+            smooth=smooth, radius=radius)
 
         # skimage precision warning
         with warnings.catch_warnings():
