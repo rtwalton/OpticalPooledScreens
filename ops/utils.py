@@ -11,6 +11,20 @@ import pandas as pd
 
 
 # PYTHON
+def combine_tables(tag,output_filetype='hdf',subdir='process'):
+    files = glob.glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
+    arr = []
+    for f in tqdn(files):
+        try:
+            arr += [pd.read_csv(f)]
+        except pd.errors.EmptyDataError:
+            pass        
+    df = pd.concat(arr)
+    if output_filetype=='csv':
+        df.to_csv(tag+'.csv')
+    else:
+        df.to_hdf(tag + '.hdf', tag, mode='w')
+
 def memoize(active=True, copy_numpy=True):
     """The memoized function has attributes `cache`, `keys`, and `reset`. 
     
