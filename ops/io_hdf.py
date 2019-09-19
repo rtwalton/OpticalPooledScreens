@@ -27,7 +27,10 @@ def read_hdf_image(filename,bbox=None,array_name='image'):
 	try:
 		image_node = hdf_file.get_node('/',name=array_name)
 		if bbox is not None:
-			return image_node[...,bbox[0]:bbox[2],bbox[1]:bbox[3]]
+			#check if bbox is in image bounds
+			i0, j0 = max(bbox[0], 0), max(bbox[1], 0)
+			i1, j1 = min(bbox[2], image_node.shape[-2]), min(bbox[3], image_node.shape[-1])
+			return image_node[...,i0:i1,j0:j1]
 		else:
 			return image_node[...]
 	except:
