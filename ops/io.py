@@ -12,6 +12,7 @@ from ops.external.tifffile_new import imread
 # currently needed to save ImageJ-compatible hyperstacks
 from ops.external.tifffile_old import imsave
 from nd2reader import ND2Reader
+from ops.io_hdf import read_hdf_image
 # from tqdm import tqdm_notebook as tqdn
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
@@ -113,16 +114,21 @@ def grid_view(files, bounds, padding=40, with_mask=False,im_func=None):
 
     arr = []
     Is = {}
+
+    if im_func is None:
+        im_func = lambda x:x
+
     for filename, bounds_ in zip(files, bounds):
-        try:
-            I = Is[filename]
-        except KeyError:
-            if im_func is not None:
-                I = im_func(read_stack(filename, copy=False))
-            else:
-                I = read_stack(filename, copy=False) 
-            Is[filename] = I
-        I_cell = ops.utils.subimage(I, bounds_, pad=padding)
+        if filename.endswith('hdf'):
+            bounds_ = np.array(bounds_)+np.array((-padding,-padding,padding,padding))
+            I_cell = im_func(read_hdf_image(filename, bbox=bounds_))
+        else:
+            try:
+                I = Is[filename]
+            except KeyError:
+                I = im_func(read_stack(filename, copy=False)) 
+                Is[filename] = I
+            I_cell = ops.utils.subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 
     if with_mask:
