@@ -30,12 +30,14 @@ def read_hdf_image(filename,bbox=None,array_name='image'):
 			#check if bbox is in image bounds
 			i0, j0 = max(bbox[0], 0), max(bbox[1], 0)
 			i1, j1 = min(bbox[2], image_node.shape[-2]), min(bbox[3], image_node.shape[-1])
-			return image_node[...,i0:i1,j0:j1]
+			image = image_node[...,i0:i1,j0:j1]
 		else:
-			return image_node[...]
+			image = image_node[...]
 	except:
 		print('error in reading image array from hdf file')
+		image = None
 	hdf_file.close()
+	return image
 
 def nd2_to_hdf(file,mag='20X',zproject=True,fov_axes='czxy'):
     nd2_file_pattern = [
