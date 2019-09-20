@@ -12,8 +12,8 @@ from ops.external.tifffile_new import imread
 # currently needed to save ImageJ-compatible hyperstacks
 from ops.external.tifffile_old import imsave
 from nd2reader import ND2Reader
-from ops.io_hdf import read_hdf_image
-# from tqdm import tqdm_notebook as tqdn
+# from ops.io_hdf import read_hdf_image
+from tables import file
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
@@ -107,7 +107,7 @@ def ij_open(image):
     elif isinstance(image,str):
         os.system("open -a 'Fiji' "+image)
 
-def grid_view(files, bounds, padding=40, with_mask=False,im_func=None):
+def grid_view(files, bounds, padding=40, with_mask=False,im_func=None,memoize=True):
     """Mask is 1-indexed, zero indicates background.
     """
     padding = int(padding)
@@ -118,10 +118,14 @@ def grid_view(files, bounds, padding=40, with_mask=False,im_func=None):
     if im_func is None:
         im_func = lambda x:x
 
+    # if memoize:
+    #     open_hdf_file.keys['active'] = True
+    #     read_stack.keys['active'] = True
+
     for filename, bounds_ in zip(files, bounds):
         if filename.endswith('hdf'):
             bounds_ = np.array(bounds_)+np.array((-padding,-padding,padding,padding))
-            I_cell = im_func(read_hdf_image(filename, bbox=bounds_))
+            I_cell = im_func(read_hdf_image(filename, bbox=bounds_, memoize=memoize))
         else:
             try:
                 I = Is[filename]
@@ -154,6 +158,38 @@ def read_stack(filename, copy=True):
     if copy:
         data = data.copy()
     return data
+
+@ops.utils.memoize(active=False)
+def open_hdf_file(filename,mode='r'):
+    return tables.file.open_file(filename,mode=mode)
+
+def read_hdf_image(filename,bbox=None,array_name='image',memoize=False):
+    """reads in image from hdf file with given bbox. significantly (~100x) faster when reading in a
+    100x100 pixel chunk compared to reading in an entire 1480x1480 tif.
+    WARNING: metadata is read into cache on first access; if file metadata changes, re-reading the file will 
+    cause problems. Simple work-around: delete file, try reading in (error), replace with new file, read in.
+    """
+    # if memoize:
+    #     open_hdf_file.keys['active'] = True
+    print(open_hdf_file.keys['active'])
+
+    hdf_file = open_hdf_file(filename,mode='r')
+
+    try:
+        image_node = hdf_file.get_node('/',name=array_name)
+        if bbox is not None:
+            #check if bbox is in image bounds
+            i0, j0 = max(bbox[0], 0), max(bbox[1], 0)
+            i1, j1 = min(bbox[2], image_node.shape[-2]), min(bbox[3], image_node.shape[-1])
+            image = image_node[...,i0:i1,j0:j1]
+        else:
+            image = image_node[...]
+    except:
+        print('error in reading image array from hdf file')
+        image = None
+    if not memoize:
+        hdf_file.close()
+    return image
 
 
 def save_stack(name, data, luts=None, display_ranges=None, 
