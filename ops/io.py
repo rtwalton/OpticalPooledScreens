@@ -171,7 +171,6 @@ def read_hdf_image(filename,bbox=None,array_name='image',memoize=False):
     """
     # if memoize:
     #     open_hdf_file.keys['active'] = True
-    print(open_hdf_file.keys['active'])
 
     hdf_file = open_hdf_file(filename,mode='r')
 
