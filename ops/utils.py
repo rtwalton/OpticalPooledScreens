@@ -316,6 +316,8 @@ def gb_apply_parallel(df, cols, func, n_jobs=None, tqdn=True):
     if isinstance(results[0], pd.DataFrame):
         arr = []
         for labels, df in zip(names, results):
+            if !isinstance(labels,iterable):
+                labels = [labels]
             (df.assign(**{c: l for c, l in zip(cols, labels)})
                 .pipe(arr.append))
         results = pd.concat(arr)
