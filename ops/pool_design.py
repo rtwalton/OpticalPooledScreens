@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 import os
 from Levenshtein import distance
+from natsort import natsorted
+from functools import partial
+
+from tqdm import tqdm_notebook as tqdn
 
 import ops.utils
 from ops.constants import *
@@ -45,43 +49,314 @@ def validate_genes(df_genes, df_sgRNAs):
     return df_genes
 
 
-def select_prefix_group(df_genes, df_sgRNAs):
-    # doesn't shortcut if some genes need less guides
-    prefix_length, edit_distance = (
-        df_genes[[PREFIX_LENGTH, EDIT_DISTANCE]].values[0])
+    def parse_gene_id(design_gene_id):
+      return natsorted([int(id) for id in design_gene_id.split('&')])
 
+    df_design_gene_id['design_gene_symbol'] = (df_design_gene_id['design_gene_id']
+      .apply(lambda x: '&'.join(df_gene_symbol
+        .query('gene_id == {}'.format(str(parse_gene_id(x))))
+        ['gene_symbol']
+        .tolist()
+        ))
+      )
+
+    return df_design_gene_id
+
+def multiple_targets(df_sgRNAs):
+    return df_sgRNAs.duplicated(subset=['sgRNA'],keep=False).astype('int')
+
+# SELECT GUIDES
+
+def select_prefix_group(df_genes, df_sgRNAs, priority=[RANK], n_cores=-2, gene_id=GENE_ID):
+    """priority is for priority within gene id
+    """
+    # doesn't shortcut if some genes need less guides
+    prefix_length, edit_distance = (df_genes[[PREFIX_LENGTH, EDIT_DISTANCE]].values[0])
+    
+    print('selecting guides')
     return (df_sgRNAs
-        .join(df_genes.set_index(GENE_ID), on=GENE_ID, how='inner')
-        .pipe(select_guides, prefix_length, edit_distance)
-        .sort_values([SUBPOOL, GENE_ID, RANK])
-    #     # .set_index(GENE_ID)
-    #     # .pipe(df_genes.join, on=GENE_ID, how='outer', rsuffix='_remove')
-    #     # .pipe(lambda x: x[[c for c in x.columns if not c.endswith('_remove')]])
-        .assign(selected_rank=lambda x: 
-            ops.utils.rank_by_order(x, [SUBPOOL, GENE_ID]))
-        .query('selected_rank <= sgRNAs_per_gene')
-        .sort_values([SUBPOOL, GENE_ID, 'selected_rank'])
-        .drop(['selected_rank'], axis=1)
+        .join(df_genes.set_index(gene_id), on=gene_id, how='inner')
+        .assign(sgRNAs_per_gene_exist=lambda x: x.groupby(gene_id)[SGRNA].transform(len))
+        .pipe(select_guides, prefix_length, edit_distance, gene_id, priority, n_cores)
+        .drop(columns=['sgRNAs_per_gene_exist'])
     )
 
 
-def select_guides(df_input, prefix_length, edit_distance):
+def select_guides(df_input, prefix_length, edit_distance, gene_id=GENE_ID, priority=[RANK], n_cores=-2):
     """`df_input` has gene_id, sgRNAs_per_gene
+    priority is for priority within a gene id
     """
-    # TODO: NEEDS EDIT DISTANCE
+
+    df_deduped = (df_input.copy()
+          .assign(prefix=lambda x: x['sgRNA'].str[:prefix_length])
+          # guides from genes with more guides more likely to have lower rank, this sort order seems safe:
+          .sort_values([RANK,'sgRNAs_per_gene_exist'])
+          .drop_duplicates('prefix')
+          )
+
     if edit_distance != 1:
-        raise NotImplementedError('edit distance needs doing')
+        print('edit distance detected')
+        # selected_guides = 
+        return (df_deduped
+          .assign(sgRNAs_per_gene_exist=lambda x: 
+              x.groupby(gene_id)[SGRNA].transform(len))
+          .sort_values(priority)
+          .pipe(find_group_cliques,prefix_length,edit_distance,
+            gene_id, n_cores)
+          # [SGRNA].pipe(list)
+          )
+        # return df_input.query(loc('{SGRNA} == @selected_guides'))
 
-    selected_guides = (df_input
-     .assign(prefix=lambda x: x['sgRNA'].str[:prefix_length])
-     .pipe(lambda x: x.join(x[GENE_ID].value_counts().rename('sgRNAs_per_id'), 
-         on=GENE_ID))
-     .sort_values([RANK, 'sgRNAs_per_id'])
-     .drop_duplicates('prefix')
-     [SGRNA].pipe(list)
-     )
-    return df_input.query(loc('{SGRNA} == @selected_guides'))
+    else:
+        return (df_deduped
+         .sort_values([SUBPOOL,gene_id]+priority)
+         .assign(selected_rank=lambda x: 
+            ops.utils.rank_by_order(x, [SUBPOOL, gene_id]))
+         .query('selected_rank <= sgRNAs_per_gene')
+         .sort_values([SUBPOOL, gene_id, 'selected_rank'])
+         .drop(['selected_rank'], axis=1)
+         # [SGRNA].pipe(list)
+         )
+        # return df_input.query(loc('{SGRNA} == @selected_guides'))
 
+def find_group_cliques(df_input, prefix_length=12, edit_distance=2,gene_id=GENE_ID, n_cores=-2):
+
+    prefixes = df_input['sgRNA'].str[:prefix_length+1].pipe(list)
+
+    hash_buckets = build_khash(tqdn(prefixes,'hash'), edit_distance)
+    
+    # for parallel distance calculation
+    arr = [[x] for x in hash_buckets]
+
+    print('hashed')
+
+    # f = partial(sparse_dist, threshold=edit_distance
+    #             ,distance_func=distance_prefix
+    #            )
+
+    # print('sparse_dist function initialized')
+    # import multiprocessing
+    # with multiprocessing.Pool(n_cores) as p:
+    #     r = list(tqdn(p.imap(f, arr), 'distance',total=len(arr)))
+
+    from joblib import Parallel, delayed
+    results = Parallel(n_cores)(delayed(sparse_dist)(bucket,threshold=edit_distance,
+                                                     distance_func=distance_prefix) 
+                                for bucket
+                                in tqdn(arr,'distance'))
+
+    print('distanced')
+
+    Distance = dict()
+    for x in results:
+        Distance.update(x)
+
+    sparse_distance = sparse_view(prefixes, Distance)
+
+    selected = maxy_clique_groups(sparse_distance, df_input[gene_id].pipe(list), df_input['sgRNAs_per_gene'].pipe(list))
+    # xs = [prefixes[i] for i in selected]
+
+    return df_input.iloc[selected]
+
+def build_khash(prefixes, k, return_dict=False):
+    """builds prefix substring hash and groups prefixes for prioritization of
+    levenshtein distance calculation
+    """
+    D = defaultdict(list)
+    # makes dictionary of {(position,substring) hash:prefix(es)}
+    # prefixes sharing one hash are less than levenshtein distance k apart
+    for x in prefixes:
+        for h in khash(x, k):
+             D[h].append(x)
+
+    # remove duplicate prefixes and sort
+    D = {k: sorted(set(v)) for k,v in D.items()}
+    if return_dict:
+        return D
+    else:
+        hash_buckets = list(D.values())
+        return hash_buckets
+
+def khash(s, k):
+    """Divide a string into substrings suitable for checking edit distance of 
+    `k`. The substrings are marked by position in the string. Two strings of 
+    the same length with Levenshtein edit distance less than `k` will share 
+    at least one (position, substring) pair.
+    """
+    n = len(s)
+    window = int(np.ceil((n - k) / float(k)))
+    s = s + s
+    arr = []
+    for i in range(n):
+        # arr += [s[i:i+window]]
+        # for including single insertions? (LF comment)
+        for j in (0, 1):
+            # builds tuples of (position,slice of size window)
+            arr += [((i + j) % n, s[i:i+window])]
+    return arr
+
+def sparse_dist(hash_buckets, threshold,distance_func=None):
+    """Calculates levenshtein distance between prefixes in each 
+    hash bucket; entries only kept if less than threshold.
+    """
+    if distance_func is None:
+        distance_func = distance
+    D = defaultdict(int)
+    # for each hash bucket
+    for prefixes in hash_buckets:
+    # calculate distance between all prefixes within bucket
+      for i, a in enumerate(prefixes):
+          for b in prefixes[i+1:]:
+              d = distance_func(a,b)
+              # only keep if less than threshold
+              if d < threshold:
+                  key = tuple(sorted((a,b)))
+                  D[key] = d
+    return D
+
+def distance_prefix(a, b):
+    """Hack to get edit distance of string prefixes to include insertions/deletions that
+    shift characters into/out of the prefix. Must pass prefixes of length n+1;
+    only works for single character insertion/deletion/substitution. Should be equivalent
+    to Levenshtein distance, ignoring the n + 1 position.
+    """
+    compare = [
+        # substitution
+        (a[:-1], b[:-1]),
+        # deletion
+        (a[:-1], b),
+        (a, b[:-1]),
+        # insertion
+        (a[:-1], b[:-1] + a[-1]),
+        (b[:-1], a[:-1] + b[-1]),
+    ]
+    return min(distance(x1, x2) for x1, x2 in compare)
+
+def sparse_view(prefixes, D, symmetric=True):
+    """string barcodes
+    returns sparse matrix marking where levenshtein distance is less than threshold in sparse_dist
+    """
+    # give each prefix a number id
+    mapper = {x: i for i, x in enumerate(prefixes)}
+    f = lambda x: mapper[x]
+    i,j,data = zip(*[(f(a), f(b), v) for (a,b),v in D.items()])
+    # levenshtein distance greater than 0
+    data = np.array(data) > 0
+    # prefix ids
+    i = np.array(i)
+    j = np.array(j)
+
+    # generate sparse matrix with entries = 1 where distance < threshold from sparse_dist()
+    n = len(prefixes)
+    cm = scipy.sparse.coo_matrix((data, (i, j)), shape=(n, n))
+
+    if symmetric:
+        cm = (cm + cm.T).tocsr()
+        
+    return cm
+
+def maxy_clique_groups(cm, group_ids, prefixes_per_group):
+    """
+    Selects prefixes from all possible prefix indices
+    Take up to `m`. Prioritizes groups with the fewest selected barcodes.
+    Prioritizing groups with the fewest remaining barcodes could give
+    better results.
+    """
+
+    # TODO: m as a list
+
+    # make dictionary to map prefix counts => group_ids
+    d_available_counts = defaultdict(set)
+    for group_id_, counts in Counter(group_ids).items():
+        d_available_counts[counts] |= {group_id_}
+
+    # make dictionaries to map group_id => prefix indices of sparse matrix and desired # of prefixes
+    d_group_indices = defaultdict(list)
+    d_num_to_select = dict()
+    for i_prefix, (group_id_,prefixes_per_group) in enumerate(zip(group_ids,prefixes_per_group)):
+        d_group_indices[group_id_] += [i_prefix]
+        d_num_to_select[group_id_] = prefixes_per_group
+    # reverse list because .pop() takes from the end of the list later
+    d_group_indices = {k: v[::-1] for k,v in d_group_indices.items()}
+
+    # make dictionary to map group_id => # selected
+    d_selected_counts = Counter()
+
+    selected = []
+    available = np.array(range(len(group_ids)))
+
+    while d_available_counts:
+        if (len(selected) % 100) == 0:
+            print(str(len(selected))+' prefixes selected')
+    #     assert cm[selected, :][:, selected].sum() == 0
+
+        # pick a group_id from the lowest prefix count bin
+        count = min(d_available_counts.keys())
+        group_id_ = d_available_counts[count].pop()
+
+        # remove bin if empty
+        if len(d_available_counts[count]) == 0:
+            d_available_counts.pop(count)
+
+        # only take up to m prefixes per group
+        if d_selected_counts[group_id_] == d_num_to_select[group_id_]:
+            # group_id is destroyed
+            continue
+
+        # discard indices until we find a new one
+        prefix_index = None
+        while d_group_indices[group_id_]:
+            prefix_index = d_group_indices[group_id_].pop()
+            # approach 1: check for conflict every time
+            # cm[index, selected].sum() == 0
+            # approach 2: keep an array of available indices
+            if prefix_index in available:
+                break
+        else:
+            prefix_index = None
+
+        # keep index
+        if prefix_index:
+            selected.append(prefix_index)
+            d_selected_counts[group_id_] += 1
+            available = available[available != prefix_index]
+            # get rid of incompatible barcodes
+            remove = cm[prefix_index, available].indices
+            mask = np.ones(len(available), dtype=bool)
+            mask[remove] = False
+            available = available[mask]
+
+
+        # move group_id to new available_counts bin
+        n = len(d_group_indices[group_id_])
+        if n > 0:
+            d_available_counts[n] |= {group_id_}
+
+    return selected
+
+def parallel_levenshtein_group(group, dist_func=None, n_cores=-2):
+    remainders = [group[i+1:] for i,_ in enumerate(group)]
+    if not dist_func:
+        dist_func = Levenshtein.distance
+        
+    def measure_distances(string,remainder):
+        arr = []
+        for test_string in remainder:
+            d = dist_func(string,test_string)
+            if d<2:
+                print(string,test_string)
+            arr.append(d)
+        return arr
+    
+    from joblib import Parallel, delayed
+    results = Parallel(n_cores)(delayed(measure_distances)(*subset) 
+                              for subset 
+                              in tqdn(zip(group,remainders),total=len(group)))
+    distances = []
+    for result in results:
+        distances.extend(result)
+        
+    return distances
 
 # FILTER SGRNAS
 
