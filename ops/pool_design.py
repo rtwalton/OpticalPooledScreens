@@ -206,8 +206,7 @@ def import_brunello(filename):
 
         return df.assign(**{GENE_ID: new_ids, GENE_SYMBOL: new_symbols})
 
-
-    return (pd.read_csv(filename, sep='\t')
+    df_brunello = (pd.read_csv(filename, sep='\t')
         .rename(columns=columns)
         .pipe(reassign_nontargeting)
         .pipe(ops.utils.cast_cols, int_cols=[GENE_ID])
@@ -219,16 +218,190 @@ def import_brunello(filename):
         .sort_values([GENE_ID, RANK])
         )
 
+    df_brunello.loc[df_brunello.gene_symbol=="AKAP2",'gene_id']=445815
+    df_brunello.loc[df_brunello.gene_symbol=="PALM2",'gene_id']=445815
+    df_brunello.loc[df_brunello.gene_symbol=="C10orf12",'gene_id']=84458
+    df_brunello.loc[df_brunello.gene_symbol=="C10orf131",'gene_id']=387707
+    df_brunello.loc[df_brunello.gene_symbol=="C16orf47",'gene_id']=463
+    df_brunello.loc[df_brunello.gene_symbol=="C17orf47",'gene_id']=5414
+    df_brunello.loc[df_brunello.gene_symbol=="C7orf76",'gene_id']=7979
+    df_brunello.loc[df_brunello.gene_symbol=="MIA2",'gene_id']=4253
+    df_brunello.loc[df_brunello.gene_symbol=="NARR",'gene_id']=83871
+    df_brunello.loc[df_brunello.gene_symbol=="TMEM133",'gene_id']=143872
+    df_brunello.loc[df_brunello.gene_symbol=="XAGE1B",'gene_id']=653067
+
+
+    df_brunello = df_brunello.query('gene_symbol != ["C2orf48","TMEM257","TXNRD3NB"]').copy()
+
+    return df_brunello
+
+def import_brunello_dump(filename):
+    df_brunello_dump = pd.read_csv(filename)
+
+    df_brunello_dump.loc[df_brunello_dump.gene_symbol=="AKAP2",'gene_id']=445815
+    df_brunello_dump.loc[df_brunello_dump.gene_symbol=="PALM2",'gene_id']=445815
+    df_brunello_dump.loc[df_brunello_dump.gene_symbol=="C16orf47",'gene_id']=463
+    df_brunello_dump.loc[df_brunello_dump.gene_symbol=="C17orf47",'gene_id']=5414
+
+    df_brunello_dump = df_brunello_dump.query('gene_symbol != ["C2orf48","TMEM257","TXNRD3NB"]').copy()
+
+    return df_brunello_dump
+
 
 def import_tkov3(filename, df_ncbi):    
     columns = {'GENE': GENE_SYMBOL, 'SEQUENCE': SGRNA}
     symbols_to_ids = df_ncbi.set_index(GENE_SYMBOL)[GENE_ID]
-    return (pd.read_excel(filename)
-     .rename(columns=columns)
-     [[GENE_SYMBOL, SGRNA]]
-     .join(symbols_to_ids, on=GENE_SYMBOL, how='inner')
+    # symbols_to_ids.index = symbols_to_ids.index.str.upper()
+    df_tkov3 = (pd.read_excel(filename)
+      .rename(columns=columns)
+      [[GENE_SYMBOL, SGRNA]]
+      )
+
+    df_tkov3 = df_tkov3.query('gene_symbol!=["C2orf48","TMEM257","TXNRD3NB"]').copy()
+
+    df_tkov3.loc[df_tkov3.gene_symbol=="ADC",'gene_symbol']="AZIN2"
+    df_tkov3.loc[df_tkov3.gene_symbol=="AGPAT9",'gene_symbol']="GPAT3"
+    df_tkov3.loc[df_tkov3.gene_symbol=="AIM1",'gene_symbol']="CRYBG1"
+    df_tkov3.loc[df_tkov3.gene_symbol=="B3GNT1",'gene_symbol']="B4GAT1"
+    df_tkov3.loc[df_tkov3.gene_symbol=="C11orf48",'gene_symbol']="LBHD1"
+    df_tkov3.loc[df_tkov3.gene_symbol=="C15orf38",'gene_symbol']="ARPIN"
+    df_tkov3.loc[df_tkov3.gene_symbol=="C2ORF15",'gene_symbol']="C2orf15"
+    df_tkov3.loc[df_tkov3.gene_symbol=="C2orf47",'gene_symbol']="MAIP1"
+    df_tkov3.loc[df_tkov3.gene_symbol=="C6ORF165",'gene_symbol']="C6orf165"
+    df_tkov3.loc[df_tkov3.gene_symbol=="C7orf55",'gene_symbol']="FMC1"
+    df_tkov3.loc[df_tkov3.gene_symbol=="CD97",'gene_symbol']="ADGRE5"
+    df_tkov3.loc[df_tkov3.gene_symbol=="CXXC11",'gene_symbol']="RTP5"
+    df_tkov3.loc[df_tkov3.gene_symbol=="FLJ27365",'gene_symbol']="MIRLET7BHG"
+    df_tkov3.loc[df_tkov3.gene_symbol=="GIF",'gene_symbol']="CBLIF"
+    df_tkov3.loc[df_tkov3.gene_symbol=="HN1L",'gene_symbol']="JPT2"
+    df_tkov3.loc[df_tkov3.gene_symbol=="HN1",'gene_symbol']="JPT1"
+    df_tkov3.loc[df_tkov3.gene_symbol=="KIAA1045",'gene_symbol']="PHF24"
+    df_tkov3.loc[df_tkov3.gene_symbol=="NAT6",'gene_symbol']="NAA80"
+    df_tkov3.loc[df_tkov3.gene_symbol=="NOV",'gene_symbol']="CCN3"
+    df_tkov3.loc[df_tkov3.gene_symbol=="STRA13",'gene_symbol']="CENPX"
+    df_tkov3.loc[df_tkov3.gene_symbol=="ZHX1-C8ORF76",'gene_symbol']="ZHX1-C8orf76"
+    df_tkov3.loc[df_tkov3.gene_symbol=="MUM1",'gene_symbol']="PWWP3A"
+    df_tkov3.loc[df_tkov3.gene_symbol=='CSRP2BP','gene_symbol'] = 'KAT14'
+    df_tkov3.loc[df_tkov3.gene_symbol=='C10orf2','gene_symbol'] = 'TWNK'
+    df_tkov3.loc[df_tkov3.gene_symbol=='AZI1','gene_symbol'] = 'CEP131'
+    df_tkov3.loc[df_tkov3.gene_symbol=='EFTUD1','gene_symbol'] = 'EFL1'
+    # df_tkov3[GENE_SYMBOL]=df_tkov3[GENE_SYMBOL].str.upper()
+    return (df_tkov3
+     .join(symbols_to_ids, on=GENE_SYMBOL, how='left')
      .assign(**{RANK: lambda x: ops.utils.rank_by_order(x, GENE_ID)})
     )
+
+def import_CRISPRfocus(filename,df_ncbi):
+    df_CRISPRfocus = pd.read_csv(filename)
+
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="ZHX1-C8ORF76",'gene_symbol']="ZHX1-C8orf76"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="TGIF2-C20ORF24",'gene_symbol']="TGIF2-C20orf24"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="RPL17-C18ORF32",'gene_symbol']="RPL17-C18orf32"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="ANXA8L1",'gene_id']=np.nan
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="MUM1",'gene_symbol']="PWWP3A"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="NAT6",'gene_symbol']="NAA80"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="SLC35E2",'gene_symbol']="SLC35E2A"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="GIF",'gene_symbol']="CBLIF"
+    df_CRISPRfocus.loc[df_CRISPRfocus.gene_symbol=="NOV",'gene_symbol']="CCN3"
+
+
+    # df_CRISPRfocus_id = df_CRISPRfocus.dropna(subset=['gene_id'])
+    # df_CRISPRfocus_na = df_CRISPRfocus[df_CRISPRfocus.gene_id.isna()]
+    symbols_to_ids = df_ncbi.set_index(GENE_SYMBOL)[GENE_ID]
+
+    # symbols_to_ids.index = symbols_to_ids.index.str.upper()
+    # df_CRISPRfocus_na = (df_CRISPRfocus_na
+    #                      .drop(columns=['gene_id'])
+    #                      .join(symbols_to_ids, on=GENE_SYMBOL, how='left')
+    #                     )
+    df_CRISPRfocus = (df_CRISPRfocus
+                         .drop(columns=['gene_id'])
+                         .join(symbols_to_ids, on=GENE_SYMBOL, how='left')
+                        )
+
+    df_CRISPRfocus= df_CRISPRfocus.query('gene_symbol != ["FAM231C","C2orf48","TMEM257","TXNRD3NB","FAM25B"]').copy()
+
+    # return pd.concat([df_CRISPRfocus_id,df_CRISPRfocus_na],sort=True)[['gene_symbol','gene_id','sgRNA','rank']]
+    return df_CRISPRfocus[['gene_symbol','gene_id','sgRNA','rank']]
+
+def import_wang2017(filename,df_ncbi):
+    df_wang2017 = (pd.read_excel(filename)
+                   .rename(columns={'sgRNA ID':'sgRNA_ID','sgRNA location':'sgRNA_location',
+                    'Genomic strand targeted':'Genomic_strand','sgRNA sequence':'sgRNA',
+                    'Other genes hits':'Other_gene_hits','Symbol':'gene_symbol'})
+                  )
+
+    def group_controls(s):
+      if s.sgRNA_ID.startswith('CTRL'):
+          s.gene_symbol = 'nontargeting'
+      elif 'INTERGENIC' in s.sgRNA_ID:
+          s.gene_symbol = 'INTERGENIC'
+      return s
+
+    df_wang2017 = df_wang2017.apply(lambda x: group_controls(x),axis=1)
+    df_wang2017 = df_wang2017.query('gene_symbol != "INTERGENIC"').copy()
+
+    df_wang2017.loc[df_wang2017.gene_symbol=="NOV",'gene_symbol']="CCN3"
+    df_wang2017.loc[df_wang2017.gene_symbol=="GIF",'gene_symbol']="CBLIF"
+    df_wang2017.loc[df_wang2017.gene_symbol=="B3GNT1",'gene_symbol']="B4GAT1"
+    df_wang2017.loc[df_wang2017.gene_symbol=="C7orf55",'gene_symbol']="FMC1"
+    df_wang2017.loc[df_wang2017.gene_symbol=="CXXC11",'gene_symbol']="RTP5"
+    df_wang2017.loc[df_wang2017.gene_symbol=="AGPAT9",'gene_symbol']="GPAT3"
+    df_wang2017.loc[df_wang2017.gene_symbol=="ZHX1-C8ORF76",'gene_symbol']="ZHX1-C8orf76"
+    df_wang2017.loc[df_wang2017.gene_symbol=="AIM1",'gene_symbol']="CRYBG1"
+    df_wang2017.loc[df_wang2017.gene_symbol=="NAT6",'gene_symbol']="NAA80"
+    df_wang2017.loc[df_wang2017.gene_symbol=="CD97",'gene_symbol']="ADGRE5"
+    df_wang2017.loc[df_wang2017.gene_symbol=="C15orf38",'gene_symbol']="ARPIN"
+    df_wang2017.loc[df_wang2017.gene_symbol=="C2orf47",'gene_symbol']="MAIP1"
+    df_wang2017.loc[df_wang2017.gene_symbol=="STRA13",'gene_symbol']="CENPX"
+    df_wang2017.loc[df_wang2017.gene_symbol=="C11orf48",'gene_symbol']="LBHD1"
+    df_wang2017.loc[df_wang2017.gene_symbol=="MUM1",'gene_symbol']="PWWP3A"
+    df_wang2017.loc[df_wang2017.gene_symbol=="HN1L",'gene_symbol']="JPT2"
+    df_wang2017.loc[df_wang2017.gene_symbol=="HN1",'gene_symbol']="JPT1"
+    df_wang2017.loc[df_wang2017.gene_symbol=="ADC",'gene_symbol']="AZIN2"
+    df_wang2017.loc[df_wang2017.gene_symbol=="TRIM49D2P",'gene_symbol']="TRIM49D2"
+    df_wang2017.loc[df_wang2017.gene_symbol=="FAM21A",'gene_symbol']="WASHC2A"
+    df_wang2017.loc[df_wang2017.gene_symbol=="SLC35E2",'gene_symbol']="SLC35E2A"
+    df_wang2017.loc[df_wang2017.gene_symbol=="APITD1",'gene_symbol']="CENPS"
+    df_wang2017.loc[df_wang2017.gene_symbol=="LIMS3L",'gene_symbol']="LIMS4"
+    df_wang2017.loc[df_wang2017.gene_symbol=='CSRP2BP','gene_symbol'] = 'KAT14'
+    df_wang2017.loc[df_wang2017.gene_symbol=='AZI1','gene_symbol'] = 'CEP131'
+    df_wang2017.loc[df_wang2017.gene_symbol=='TCEB3C','gene_symbol'] = 'ELOA3'
+    df_wang2017.loc[df_wang2017.gene_symbol=='TCEB3CL','gene_symbol'] = 'ELOA3B'
+    df_wang2017.loc[df_wang2017.gene_symbol=='EFTUD1','gene_symbol'] = 'EFL1'
+    df_wang2017.loc[df_wang2017.gene_symbol=='CGB','gene_symbol'] = 'CGB3'
+    df_wang2017.loc[df_wang2017.gene_symbol=='C10orf2','gene_symbol'] = 'TWNK'
+
+    df_wang2017 = df_wang2017.query(('gene_symbol != '
+                                     '["CT45A4","SMCR9","PRAMEF3",'
+                                     '"SPANXE","PRAMEF16","C2orf48",'
+                                     '"TMEM257","TXNRD3NB","FOXD4L2","FAM25B"]'
+                                    )
+                                   ).copy()
+
+    symbols_to_ids = df_ncbi.set_index('gene_symbol')['gene_id']
+    # symbols_to_ids.index = symbols_to_ids.index.str.upper()
+    # df_wang2017['gene_symbol']=df_wang2017['gene_symbol'].str.upper()
+
+    df_wang2017 = (df_wang2017
+                   .join(symbols_to_ids, on=['gene_symbol'], how='left')
+                   .assign(**{RANK: lambda x: ops.utils.rank_by_order(x, 'gene_symbol')})
+                  )
+
+    def LOC_to_ID(s):
+      if s.gene_symbol.startswith('LOC') & np.isnan(s.gene_id):
+          s.gene_id = s.gene_symbol[3:]
+      return s
+
+    df_wang2017 = df_wang2017.apply(lambda x: LOC_to_ID(x),axis=1)
+    df_wang2017.loc[df_wang2017.gene_symbol=="CRIPAK",'gene_id'] = 285464
+    df_wang2017.loc[df_wang2017.gene_symbol=="FAM231A",'gene_id'] = 729574
+    df_wang2017.loc[df_wang2017.gene_symbol=="KIAA1804",'gene_id'] = 84451
+    df_wang2017.loc[df_wang2017.gene_symbol=="KIAA1045",'gene_id'] = 23349
+
+    df_wang2017.loc[df_wang2017.gene_symbol == "nontargeting",'gene_id']=-1
+
+    return df_wang2017[['gene_symbol','gene_id','sgRNA','rank']]
 
 
 def import_hugo_ncbi(filename):
@@ -239,6 +412,10 @@ def import_hugo_ncbi(filename):
          .dropna()
          .pipe(ops.utils.cast_cols, int_cols=[GENE_ID]))
 
+
+def import_ncbi_synonyms(filename):
+    return (pd.read_csv(filename,index_col=[0])
+         .pipe(ops.utils.cast_cols, int_cols=[GENE_ID]))
 
 def import_dialout_primers(filename):
     """Returns an array of (forward, reverse) primer pairs.
