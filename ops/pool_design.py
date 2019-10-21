@@ -26,28 +26,35 @@ def validate_design(df_design):
     return df_design
 
 
-def load_gene_list(filename):
-    return (pd.read_csv(filename, header=None)
+def load_gene_list(filename,gene_id=GENE_ID,dtype=None):
+    return (pd.read_csv(filename, header=None, dtype=dtype)
      .assign(design=os.path.splitext(filename)[0])
-     .rename(columns={0: GENE_ID})
+     .rename(columns={0: gene_id})
     )
 
 
-def validate_genes(df_genes, df_sgRNAs):
-    missing = set(df_genes[GENE_ID]) - set(df_sgRNAs[GENE_ID])
+def validate_genes(df_genes, df_sgRNAs,gene_id=GENE_ID):
+    missing = set(df_genes[gene_id]) - set(df_sgRNAs[gene_id])
     if missing:
         error = '{0} gene ids missing from sgRNA table: {1}'
         missing_ids = ', '.join(map(str, missing))
         raise ValueError(error.format(len(missing), missing_ids))
 
-    duplicates = df_genes[[SUBPOOL, GENE_ID]].duplicated(keep=False)
+    duplicates = df_genes[[SUBPOOL, gene_id]].duplicated(keep=False)
     if duplicates.any():
         error = 'duplicate genes for the same subpool: {0}'
-        xs = df_genes.loc[duplicates, [SUBPOOL, GENE_ID]].values
+        xs = df_genes.loc[duplicates, [SUBPOOL, gene_id]].values
         raise ValueError(error.format(xs))
 
     return df_genes
 
+def design_gene_symbol(df_design_gene_id,df_gene_symbol=pd.DataFrame()):
+    if df_gene_symbol.empty:
+      df_gene_symbol = df_design_gene_id
+    df_gene_symbol = (df_gene_symbol
+      .drop_duplicates('gene_id')
+      [['gene_id','gene_symbol']]
+      )
 
     def parse_gene_id(design_gene_id):
       return natsorted([int(id) for id in design_gene_id.split('&')])
