@@ -22,7 +22,7 @@ def correlate_channels(r, first, second):
 
 
 def masked(r, index):
-    return r.intensity_image_full[index][r.filled_image]
+    return r.intensity_image_full[index][r.image]
 
 def correlate_channels_masked(r, first, second):
     """Cross-correlation between non-zero pixels. 
