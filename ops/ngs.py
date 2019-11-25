@@ -73,9 +73,7 @@ def calc_stats(df_hist, df_design):
      .sort_values(['dataset', 'plate', 'well', 'sgRNA_detected'],
         ascending=[True, True, True, False])
     )     
-
-
-<<<<<<< HEAD
+    
 def identify_pool(df_hist, df_design, dataset_is_subpool = False):
     cols = [SUBPOOL, 'sgRNA','gene_symbol','spots_per_oligo']
 
@@ -86,11 +84,6 @@ def identify_pool(df_hist, df_design, dataset_is_subpool = False):
     else:
         LEFT_ON = 'sgRNA'
         RIGHT_ON = LEFT_ON
-
-=======
-def identify_pool(df_hist, df_design):
-    cols = ['subpool', 'spots_per_oligo']
->>>>>>> upstream/master
     return (df_hist
            .merge(df_design[cols],left_on=LEFT_ON,right_on=RIGHT_ON, how='left')
            .pipe(add_design_rank, df_design)
