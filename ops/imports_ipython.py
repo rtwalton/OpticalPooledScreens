@@ -13,3 +13,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from tqdm import tqdm_notebook as tqdn
+
+from matplotlib.colors import ListedColormap
+GLASBEY_PLT = ListedColormap((GLASBEY.reshape(3,256).T)/256)
