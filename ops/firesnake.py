@@ -201,18 +201,34 @@ class Snake():
         return cells
 
     @staticmethod
-    def _segment_cells_tubulin(tubulin, nuclei, threshold,**kwargs):
+    def _segment_cells_tubulin(data, nuclei, threshold, area_min, area_max, radius=15,
+        method='otsu', tubulin_channel=1, remove_boundary_cells=False, **kwargs):
         """Segment cells from aligned data. Matches cell labels to nuclei labels.
         Note that labels can be skipped, for example if cells are touching the 
         image boundary.
         """
-        if len(tubulin)>2:
-            tubulin = tubulin[1]
+        if data.ndim == 3:
+            tubulin = data[tubulin_channel].astype(np.uint16)
+        elif data.ndim == 2:
+            tubulin = data.astype(np.uint16)
+        else:
+            raise ValueError('input image has more than 3 dimensions')
+
+        kwargs = dict(threshold=threshold, 
+            area_min=area_min, 
+            area_max=area_max, 
+            radius=radius,
+            method=method)
+
+        kwargs.update(**kwargs)
+
+        mask = ops.process.find_tubulin_background(tubulin,nuclei,**kwargs)
+
         try:
             # skimage precision warning
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                cells = ops.process.find_cells_tubulin(nuclei, tubulin, threshold=lambda x:threshold,**kwargs)
+                cells = ops.process.find_cells(nuclei,mask,remove_boundary_cells=remove_boundary_cells)
         except ValueError:
             print('segment_cells error -- no cells')
             cells = nuclei

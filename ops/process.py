@@ -85,32 +85,6 @@ def find_cells(nuclei, mask, remove_boundary_cells=True):
 
     return cells.astype(np.uint16)
 
-def find_cells_tubulin(nuclei, tubulin, threshold,radius=15, area_min=10, score=lambda r: r.mean_intensity, 
-                    remove_boundary_cells=True,smooth=2):
-    """Convert binary mask to cell labels, based on nuclei labels.
-
-    Expands labeled nuclei to cells, constrained to where mask is >0.
-    """
-    mask = binarize(tubulin,radius,area_min,equalize=True)
-    labeled = skimage.measure.label(mask)
-    labeled = filter_by_region(labeled, score, threshold, intensity_image=tubulin) > 0
-    filled = ndimage.binary_fill_holes(labeled)
-    difference = skimage.measure.label(filled!=labeled)
-    change = filter_by_region(difference, lambda r: r.area < area_min, 0) > 0
-    labeled[change] = filled[change]
-
-    labeled = labeled + nuclei > 0
-
-    cells = apply_watershed(labeled,smooth=smooth)
-    cells = filter_by_region(cells,lambda r: r.intensity_image.sum(),lambda x: 1,intensity_image=nuclei)
-    # remove cells touching the boundary
-    if remove_boundary_cells:
-        cut = np.concatenate([cells[0,:], cells[-1,:], 
-                              cells[:,0], cells[:,-1]])
-        cells.flat[np.in1d(cells, np.unique(cut))] = 0
-
-    return cells.astype(np.uint16)
-
 def label_erosion(labels):
     regions = skimage.measure.regionprops(labels, intensity_image=labels)
     eroded = np.zeros(labels.shape).astype('uint16')
@@ -269,6 +243,38 @@ def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
 
     return result
 
+def find_tubulin_background(tubulin, nuclei, threshold, var_size=10, smooth=5, var_threshold=20000,
+                radius=15, area_min=500, area_max=10000, score=lambda r: r.mean_intensity,
+                method='otsu',**kwargs):
+    """radius determines neighborhood for local mean thresholding, 
+    smooth determines gaussian kernel for smoothing prior to watershed.
+    """
+
+    def var_filter(arr, size):
+        c1 = ndimage.filters.uniform_filter(arr, size)
+        c2 = ndimage.filters.uniform_filter(arr*arr, size)
+        return ((c2 - c1*c1))
+
+    # smoothed variance filter to enhave contrast
+    var = var_filter(tubulin.astype('float'),var_size)
+    preprocess = ndimage.filters.gaussian_filter(var,sigma=smooth)
+    preprocess = np.clip(preprocess,0,65535).astype('uint16')
+
+    # binarize with a local otsu threshold, keep only regions above variance threshold
+    mask = binarize(preprocess, radius, area_min, method=method,**kwargs )
+    labeled = skimage.measure.label(mask)
+    labeled = filter_by_region(labeled, score, threshold=lambda x:var_threshold, intensity_image=preprocess) > 0
+
+    # add areas labeled as nuclei
+    background = (nuclei +labeled)>0
+
+    # fill holes below minimum area or above intensity threshold
+    filled = ndimage.binary_fill_holes(background)
+    difference = skimage.measure.label(filled!=background)
+    change = filter_by_region(difference, lambda r: ((r.area < area_min) | (r.mean_intensity>threshold)), 0, intensity_image=tubulin) > 0
+    background[change] = filled[change]
+
+    return background
 
 def binarize(image, radius, min_size,method='mean',percentile=0.5,equalize=False,filter=True):
     """Apply local mean threshold to find outlines. Filter out
@@ -305,8 +311,14 @@ def filter_by_region(labeled, score, threshold, intensity_image=None, relabel=Tr
     determine the minimum score at which a region is kept.
     If `relabel` is true, the regions are relabeled starting from 1.
     """
+    from ops.features import masked
+
     labeled = labeled.copy().astype(int)
-    regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
+    if intensity_image is None:
+        regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
+    else:
+        regions = ops.utils.regionprops(labeled,intensity_image=intensity_image)
+    
     scores = np.array([score(r) for r in regions])
 
     if all([s in (True, False) for s in scores]):
