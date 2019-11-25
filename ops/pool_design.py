@@ -685,6 +685,17 @@ def import_wang2017(filename,df_ncbi):
 
     return df_wang2017[['gene_symbol','gene_id','sgRNA','rank']]
 
+def import_GPP_designer_results(filename):
+    df_gpp = pd.read_csv(filename,sep='\t')
+    # df_gpp = df_gpp.drop(columns=df_gpp.columns[df_gpp.columns.str.startswith("#")])
+    df_gpp.columns = ['_'.join(col.lower().split(' ')) for col in df_gpp.columns]
+    return (df_gpp
+        .rename(columns={'combined_rank':'rank','sgrna_sequence':'sgRNA','target_gene_id':'gene_id',
+                           'target_gene_symbol':'gene_symbol'})
+        [['gene_id','gene_symbol','rank','off-target_rank','on-target_efficacy_score',
+        'on-target_rank','pick_order','exon_number','sgRNA']]
+        )
+
 
 def import_hugo_ncbi(filename):
     columns = {'Approved symbol': GENE_SYMBOL,
