@@ -99,13 +99,13 @@ def tile_config(df,output_filename):
     f.close()
 
 
-def ij_open(image):
-    if isinstance(image,np.ndarray):
-        save_stack('temp',image)
-        os.system("open -a 'Fiji' temp.tif")
-        os.system("rm temp.tiff")
-    elif isinstance(image,str):
-        os.system("open -a 'Fiji' "+image)
+# def ij_open(image):
+#     if isinstance(image,np.ndarray):
+#         save_stack('temp',image)
+#         os.system("open -a 'Fiji' temp.tif")
+#         os.system("rm temp.tiff")
+#     elif isinstance(image,str):
+#         os.system("open -a 'Fiji' "+image)
 
 def grid_view(files, bounds, padding=40, with_mask=False,im_func=None,memoize=True):
     """Mask is 1-indexed, zero indicates background.

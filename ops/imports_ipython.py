@@ -13,4 +13,3 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from tqdm import tqdm_notebook as tqdn
-from ops.io import ij_open
