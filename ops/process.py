@@ -29,7 +29,7 @@ def feature_table(data, labels, features, global_features=None):
     for region in regions:
         for feature, func in features.items():
             result = func(region)
-            if isinstance(result,list)|isinstance(result,np.ndarray):
+            if isinstance(result,list)|isinstance(result,np.ndarray)|isinstance(result,tuple):
                 if len(result)==1:
                     results[feature].append(result[0])
                 else:

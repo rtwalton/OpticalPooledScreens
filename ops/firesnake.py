@@ -19,6 +19,7 @@ import ops.io_hdf
 from ops.process import Align
 from scipy.stats import mode
 from ops.constants import *
+from itertools import combinations
 
 
 class Snake():
@@ -384,6 +385,19 @@ class Snake():
         return df
 
     @staticmethod
+    def _extract_features_bare(data, labels, features=None,**kwargs):
+        """Extracts features in dictionary and combines with generic region
+        features.
+        """
+        from ops.process import feature_table
+        features = features.copy() if features else dict()
+        features.update({'label': lambda r: r.label})
+
+        df = feature_table(data, labels, features)
+
+        return df
+
+    @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
         """Features for frameshift reporter phenotyped in DAPI, HA channels.
         """
@@ -475,31 +489,152 @@ class Snake():
         return df
 
     @staticmethod
-    def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards):
+    def _extract_phenotype_cp(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
+        import ops.cp_emulator
+
+        if nucleus_channels == 'all':
+            try:
+                nucleus_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                nucleus_channels = [0]
+
+        if cell_channels == 'all':
+            try:
+                cell_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                cell_channels = [0]
+
+        dfs = []
+
+        # nucleus shape
+        dfs.append(Snake._extract_features(nuclei,nuclei,wildcards,ops.cp_emulator.shape_features)
+            .rename(columns=ops.cp_emulator.shape_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'nucleus_'+x if x not in wildcards.keys() else x)
+            )
+
+        # cell shape
+        dfs.append(Snake._extract_features_bare(cells,cells,ops.cp_emulator.shape_features)
+            .rename(columns=ops.cp_emulator.shape_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'cell_'+x)
+            )
+
+        # nucleus grayscale channel features
+        dfs.extend([(Snake._extract_features_bare(data_phenotype[...,channel,:,:],nuclei,ops.cp_emulator.grayscale_features)
+            .rename(columns=ops.cp_emulator.intensity_distribution_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'nucleus_'+channel_names[channel]+'_'+x)
+            ) 
+            for channel in nucleus_channels]
+            )
+
+        # cell grayscale channel features
+        dfs.extend([(Snake._extract_features_bare(data_phenotype[...,channel,:,:],cells,ops.cp_emulator.grayscale_features)
+            .rename(columns=ops.cp_emulator.intensity_distribution_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'cell_'+channel_names[channel]+'_'+x)
+            ) 
+            for channel in cell_channels]
+            )
+
+        # generate correlation column names
+
+        ## nucleus
+        nucleus_correlation_columns = {
+        'colocalization_{}'.format(inner_num+outer_num*len(ops.cp_emulator.colocalization_columns))
+        :col.format(first=channel_names[first],second=channel_names[second]) 
+        for outer_num,(first,second) in enumerate(combinations(nucleus_channels,2)) 
+        for inner_num,col in enumerate(ops.cp_emulator.colocalization_columns)
+        }
+
+        nucleus_correlation_columns.update({
+        'correlation_{}'.format(num)
+        :ops.cp_emulator.correlation_columns[0].format(first=channel_names[first],second=channel_names[second]) 
+        for num,(first,second) in enumerate(combinations(nucleus_channels,2))
+        })
+
+        nucleus_correlation_columns.update({
+        'lstsq_slope_{}'.format(num)
+        :ops.cp_emulator.correlation_columns[1].format(first=channel_names[first],second=channel_names[second]) 
+        for num,(first,second) in enumerate(combinations(nucleus_channels,2))
+        })
+
+        ## cell
+        cell_correlation_columns = {
+        'colocalization_{}'.format(inner_num+outer_num*len(ops.cp_emulator.colocalization_columns))
+        :col.format(first=channel_names[first],second=channel_names[second]) 
+        for outer_num,(first,second) in enumerate(combinations(cell_channels,2)) 
+        for inner_num,col in enumerate(ops.cp_emulator.colocalization_columns)
+        }
+
+        cell_correlation_columns.update({
+        'correlation_{}'.format(num)
+        :ops.cp_emulator.correlation_columns[0].format(first=channel_names[first],second=channel_names[second]) 
+        for num,(first,second) in enumerate(combinations(cell_channels,2))
+        })
+
+        cell_correlation_columns.update({
+        'lstsq_slope_{}'.format(num)
+        :ops.cp_emulator.correlation_columns[1].format(first=channel_names[first],second=channel_names[second]) 
+        for num,(first,second) in enumerate(combinations(cell_channels,2))
+        })
+
+
+        # nucleus channel correlations
+        dfs.append(Snake._extract_features_bare(data_phenotype[...,nucleus_channels,:,:],nuclei,ops.cp_emulator.correlation_features)
+            .rename(columns=nucleus_correlation_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'nucleus_'+x)
+            )
+
+        # cell channel correlations
+        dfs.append(Snake._extract_features_bare(data_phenotype[...,cell_channels,:,:],cells,ops.cp_emulator.correlation_features)
+            .rename(columns=cell_correlation_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'cell_'+x)
+            )
+
+        # nucleus neighbors
+        dfs.append(ops.cp_emulator.neighbor_measurements(nuclei,distances=[1,10])
+            .set_index('label')
+            .rename(columns = lambda x: 'nucleus_'+x)
+            )
+
+        # cell neighbors
+        dfs.append(ops.cp_emulator.neighbor_measurements(cells,distances=[1,10])
+            .set_index('label')
+            .rename(columns = lambda x: 'cell_'+x)
+            )
+
+        return pd.concat(dfs,axis=1,join='outer',sort=True).reset_index()
+
+    # @staticmethod
+    # def _extract_phenotype_morphology(data_phenotype, nuclei, cells, wildcards):
         
-        import ops.morphology_features
-        # def masked(region, index):
-        #     return region.intensity_image_full[index][region.filled_image]
+    #     import ops.morphology_features
+    #     # def masked(region, index):
+    #     #     return region.intensity_image_full[index][region.filled_image]
 
-        df_n =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
-                 .drop(columns=list(wildcards.keys()))
-                )
+    #     df_n =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
+    #              .drop(columns=list(wildcards.keys()))
+    #             )
 
-        df_n_to_c = (Snake._extract_features(cells,nuclei,wildcards,{'cell':lambda r: mode(r.intensity_image[r.intensity_image>0],axis=None).mode})
-                     .rename({'label':'nucleus'},axis=1)
-                     .drop(columns=(list(wildcards.keys())+['i','j','area']))
-                    )
+    #     df_n_to_c = (Snake._extract_features(cells,nuclei,wildcards,{'cell':lambda r: mode(r.intensity_image[r.intensity_image>0],axis=None).mode})
+    #                  .rename({'label':'nucleus'},axis=1)
+    #                  .drop(columns=(list(wildcards.keys())+['i','j','area']))
+    #                 )
 
-        df_n_full = df_n.merge(df_n_to_c,how='left',on='nucleus')
+    #     df_n_full = df_n.merge(df_n_to_c,how='left',on='nucleus')
 
-        df_c =  (Snake
-                 ._extract_features(data_phenotype, cells, wildcards, ops.morphology_features.features_cell)
-                 .drop(columns=['i','j','area','label'])
-                ) 
+    #     df_c =  (Snake
+    #              ._extract_features(data_phenotype, cells, wildcards, ops.morphology_features.features_cell)
+    #              .drop(columns=['i','j','area','label'])
+    #             ) 
 
-        df = df_n_full.merge(df_c,how='left',on='cell')
+    #     df = df_n_full.merge(df_c,how='left',on='cell')
 
-        return df
+    #     return df
 
 
     @staticmethod
