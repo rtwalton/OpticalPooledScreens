@@ -41,8 +41,8 @@ GLASBEY = read_lut(ops.constants.GLASBEY_INVERTED)
 
 def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
     nd2_file_pattern = [
-                (r'(?P<cycle>c[0-9]+)/'
-                '(?P<dataset>.*)/'
+                (r'(?P<cycle>c[0-9]+)?/?'
+                '(?P<dataset>.*)?/?'
                 'Well(?P<well>[A-H][0-9]*)_'
                 'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
                 '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
@@ -55,7 +55,10 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
     description = ops.filenames.parse_filename(file,custom_patterns=nd2_file_pattern)
     description['ext']='tif'
     description['mag']=mag
-    description['subdir']='preprocess/'+description['cycle']
+    try:
+        description['subdir']='preprocess/'+description['cycle']
+    except:
+        description['subdir']='preprocess'
     description['dataset']=None
 
     channels = [ch for key,ch in description.items() if key.startswith('channel')]
@@ -86,6 +89,38 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
                         } for site in images.metadata['fields_of_view']]
         metadata_filename = ops.filenames.name_file(description,tag='metadata',ext='pkl')
         pd.DataFrame(well_metadata).to_pickle(metadata_filename)
+
+def single_nd2_to_tif(file,mag='10X',zproject=False):
+    nd2_file_pattern = [
+                (r'(?P<cycle>c[0-9]+)?/?'
+                '(?P<dataset>.*)?/?'
+                'Well(?P<well>[A-H][0-9]*)_'
+                '(Point[A-H][0-9]*_(?P<site>[0-9]*)_)?'
+                'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
+                '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
+                '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
+                '((?P<channel_4>[^_,]+)(_[^,]*)?)?,?'
+                '((?P<channel_5>[^_,]+)(_[^_]*)?)?'
+                '_Seq([0-9]+).nd2')
+               ]
+
+    description = ops.filenames.parse_filename(file,custom_patterns=nd2_file_pattern)
+    description['ext']='tif'
+    description['mag']=mag
+    try:
+        description['subdir']='preprocess/'+description['cycle']
+    except:
+        description['subdir']='preprocess'
+    description['dataset']=None
+
+
+    with ND2Reader(file) as image:
+        if zproject:
+                image = image.max(axis=1)
+        image.iter_axes = 'z'
+        image.bundle_axes = 'cxy'
+        filename = ops.filenames.name_file(description)
+        save_stack(filename,np.array([im for im in image]))
 
 def tile_config(df,output_filename):
     """Generate tile configuration file from site position dataframe for use with FIJI grid collection stitching
