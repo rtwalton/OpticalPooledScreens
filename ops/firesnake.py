@@ -506,6 +506,13 @@ class Snake():
 
         dfs = []
 
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+        # with catch_warnings():
+        #     simplefilter("ignore",category=UserWarning)
+            data_phenotype = data_phenotype.astype(np.uint16)
+
         # nucleus shape
         dfs.append(Snake._extract_features(nuclei,nuclei,wildcards,ops.cp_emulator.shape_features)
             .rename(columns=ops.cp_emulator.shape_columns)
