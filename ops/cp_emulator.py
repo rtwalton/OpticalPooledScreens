@@ -11,6 +11,7 @@
 # Length scales needed for feature extraction should technically be correspondingly scaled,
 # e.g., 20X with 1x1 binning images should use suggested linear length scales * 2
 
+# potential features to add: Hu moments, PFTAS
 
 import numpy as np
 # from astropy.stats import median_absolute_deviation
@@ -29,7 +30,13 @@ from ops.features import correlate_channels_masked, masked
 from ops.utils import subimage
 
 EDGE_CONNECTIVITY = 2
+
 ZERNIKE_DEGREE = 9
+
+GRANULARITY_BACKGROUND = 10 #this should be a bit larger than the radius of the features, i.e., "granules", of interest after downsampling
+GRANULARITY_BACKGROUND_DOWNSAMPLE = 1
+GRANULARITY_DOWNSAMPLE = 1
+GRANULARITY_LENGTH = 16
 
 # # MeasureCorrelation:'Measure the intensity correlation between all channels, within all objects.'
 # #     Hidden:5
@@ -120,14 +127,14 @@ colocalization_columns = [
 # #     Select objects to measure:Cytoplasm
 # #     Select objects to measure:Nuclei
 
-# Here it is described as a per-image metric, but in more recent versions of cell-profiler it is also used 
-# as a per-object metric, which is what is implemented here.
+# In CellProfiler this is a per-image metric, but is implemented here as a per-object metric.
 # to re-produce values from paper, use start_radius = 10, spectrum_length = 16, sample=sample_background=0.25
 # values here to optimize for fine speckles in single cells: THESE PARAMETERS ARE HIGHLY EXPERIMENT-DEPENDENT
 
 granularity_features = {
-	'granularity_spectrum' : lambda r: granularity_spectrum(r.intensity_image, r.image, 
-		start_radius=3, spectrum_length=16, sample=1, background_sample=0.25)
+	'granularity_spectrum' : lambda r: granularity_spectrum(r.intensity_image_full, r.image, 
+		background_radius=GRANULARITY_BACKGROUND, spectrum_length=GRANULARITY_LENGTH, 
+		downsample=GRANULARITY_DOWNSAMPLE, background_downsample=GRANULARITY_BACKGROUND_DOWNSAMPLE)
 }
 
 # # MeasureObjectIntensity:'Measure the intensity characteristics from all channels, within all objects.'
@@ -463,10 +470,10 @@ def costes_threshold(A,B,step=1,pearson_cutoff=0):
 
 	return (threshold,a*threshold+b)
 
-def granularity_spectrum(intensity_image, image, start_radius=10, spectrum_length=16, sample=0.25, background_sample=None):
+def granularity_spectrum(grayscale, labeled, background_radius=5, spectrum_length=16, downsample=1, background_downsample=0.5):
 	"""Returns granularity spectrum as defined in the CellProfiler documentation.
 	Scaled so that units are approximately the % of new granules stuck in imaginary sieve when moving to 
-	size specified by start_radius + spectrum component
+	size specified by spectrum component
 	Helpful resources:
 	Maragos P. “Pattern spectrum and multiscale shape representation”,
 		IEEE Transactions on Pattern Analysis and Machine Intelligence, 
@@ -477,35 +484,34 @@ def granularity_spectrum(intensity_image, image, start_radius=10, spectrum_lengt
 	https://en.wikipedia.org/wiki/Granulometry_(morphology)
 	http://www.ravkin.net/presentations/Statistical%20properties%20of%20algorithms%20for%20analysis%20of%20cell%20images.pdf
 	"""
-	intensity_image = intensity_image.copy()
-	image = image.copy()
+	intensity_image = grayscale.copy()
+	image = labeled.copy()
 
-	# subsample if requested
-	if not background_sample:
-		background_sample=sample
 
-	if sample < 1:
-		i_sub,j_sub = np.mgrid[0:image.shape[0]*sample, 0:image.shape[1]*sample].astype(float)/sample
+	i_sub,j_sub = np.mgrid[0:image.shape[0]*downsample, 0:image.shape[1]*downsample].astype(float)/downsample
+	if downsample < 1:
 		intensity_image = map_coordinates(intensity_image,(i_sub,j_sub),order=1)
 		image = map_coordinates(image.astype(float),(i_sub,j_sub))>0.9
-	elif background_sample<1:
-		i_sub,j_sub = np.mgrid[0:image.shape[0]*sample, 0:image.shape[1]*sample].astype(float)/sample
 
-	if background_sample <1:
-		i_sub_sub,j_sub_sub = np.mgrid[0:image.shape[0]*sample, 0:image.shape[1]*sample].astype(float)/sample
-		background = map_coordinates(intensity_image,(i_sub_sub,j_sub_sub),order=1)
+	if background_downsample <1:
+		i_sub_sub,j_sub_sub = (np.mgrid[0:image.shape[0]*background_downsample, 
+			0:image.shape[1]*background_downsample].astype(float)/background_downsample)
+		background_intensity = map_coordinates(intensity_image,(i_sub_sub,j_sub_sub),order=1)
 		background_mask = map_coordinates(image.astype(float),(i_sub_sub,j_sub_sub))>0.9
 	else:
-		background = intensity_image
+		background_intensity = intensity_image
 		background_mask = image
 
-	# opening
-	selem = skimage.morphology.disk(start_radius,dtype=bool)
-	background = skimage.morphology.erosion(background*background_mask,selem=selem)
-	background = skimage.morphology.dilation(background*background_mask,selem=selem)
+	selem = skimage.morphology.disk(background_radius,dtype=bool)
+
+	# cellprofiler masks before and between erosion/dilation steps here--
+	# this creates unwanted edge effects here. Combine erosion/dilation into opening
+	# background = skimage.morphology.erosion(background_intensity*background_mask,selem=selem)
+	# background = skimage.morphology.dilation(background,selem=selem)
+	background = skimage.morphology.opening(background_intensity,selem=selem)
 
 	# rescaling
-	if background_sample < 1:
+	if background_downsample < 1:
 		# rescale background to match intensity_image
 		i_sub *= float(background.shape[0]-1)/float(image.shape[0]-1)
 		j_sub *= float(background.shape[1]-1)/float(image.shape[1]-1)
@@ -516,8 +522,11 @@ def granularity_spectrum(intensity_image, image, start_radius=10, spectrum_lengt
 	intensity_image[intensity_image<0] = 0
 
 	# calculate granularity spectrum
-	start = np.mean(intensity_image*image)
-	erosion = intensity_image*image
+	start = np.mean(intensity_image[image])
+
+	# cellprofiler also does unwanted masking step here
+	erosion = intensity_image
+
 	current = start
 
 	footprint = skimage.morphology.disk(1,dtype=bool)
@@ -525,8 +534,10 @@ def granularity_spectrum(intensity_image, image, start_radius=10, spectrum_lengt
 	spectrum = []
 	for _ in range(spectrum_length):
 		previous = current.copy()
-		erosion = skimage.morphology.erosion(erosion*image, selem=footprint)
-		reconstruction = skimage.morphology.reconstruction(erosion, intensity_image, selem=footprint)
+		# cellprofiler does unwanted masking step here
+		erosion = skimage.morphology.erosion(erosion, selem=footprint)
+		# masking okay here--inhibits bright regions from outside object being propagated into the image
+		reconstruction = skimage.morphology.reconstruction(erosion*image, intensity_image, selem=footprint)
 		current = np.mean(reconstruction[image])
 		spectrum.append((previous - current) * 100 / start)
 
