@@ -508,9 +508,6 @@ class Snake():
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-
-        # with catch_warnings():
-        #     simplefilter("ignore",category=UserWarning)
             data_phenotype = data_phenotype.astype(np.uint16)
 
         # nucleus shape
