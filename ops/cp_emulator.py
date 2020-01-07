@@ -30,6 +30,7 @@ from ops.utils import subimage
 from ops.io_hdf import read_hdf_image
 from ops.io import read_stack as read
 from ops.firesnake import Snake
+from ops.filenames import name_file as name
 import pandas
 
 def apply_extract_features_cp(well_tile,filepattern):
