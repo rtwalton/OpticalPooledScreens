@@ -27,6 +27,25 @@ import skimage.morphology
 from skimage import img_as_ubyte
 from ops.features import correlate_channels_masked, masked
 from ops.utils import subimage
+from ops.io_hdf import read_hdf_image
+from ops.io import read_stack as read 
+import pandas
+
+def apply_extract_features_cp(well_tile,filepattern=pattern):
+    wildcards = {'well':well_tile[0],'tile':well_tile[1]}
+    filepattern.update(wildcards)
+    stacked = ops.io_hdf.read_hdf_image(name(filepattern))
+    nuclei = read(name(filepattern,subdir='process_ph',tag='nuclei',ext='tif'))
+    cells = read(name(filepattern,subdir='process_ph',tag='cells',ext='tif'))
+    df_result = Snake._extract_phenotype_cp(data_phenotype=stacked,
+                                            nuclei=nuclei,
+                                            cells=cells,
+                                            wildcards=wildcards,
+                                            nucleus_channels=[0,1,2,3],
+                                            cell_channels=[0,1,2,3],
+                                            channel_names=['dapi','tubulin','gh2ax','phalloidin']
+                                           )
+    df_result.to_csv(name(filepattern,subdir='process_ph',tag='cp_phenotype',ext='csv'))
 
 EDGE_CONNECTIVITY = 2
 
