@@ -31,7 +31,7 @@ from ops.io_hdf import read_hdf_image
 from ops.io import read_stack as read 
 import pandas
 
-def apply_extract_features_cp(well_tile,filepattern=pattern):
+def apply_extract_features_cp(well_tile,filepattern):
     wildcards = {'well':well_tile[0],'tile':well_tile[1]}
     filepattern.update(wildcards)
     stacked = ops.io_hdf.read_hdf_image(name(filepattern))
