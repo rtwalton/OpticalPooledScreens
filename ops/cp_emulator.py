@@ -362,12 +362,18 @@ shape_columns.update({
 texture_features = {
 	'haralick_5'  : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=5,  return_mean=True),
 	'haralick_10' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=10, return_mean=True),
-	'haralick_20' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=20, return_mean=True)
+	# really slow
+	# 'haralick_20' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=20, return_mean=True)
 }
 
 ######################################################################################################################################
 
-grayscale_features = {**intensity_features,**intensity_distribution_features,**texture_features,**granularity_features}
+grayscale_features = {**intensity_features,
+					  **intensity_distribution_features,
+					  **texture_features,
+					  # really slow
+					  # **granularity_features
+					 }
 
 ######################################################################################################################################
 
