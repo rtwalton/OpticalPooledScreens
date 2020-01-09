@@ -223,7 +223,9 @@ class Snake():
 
         kwargs.update(**kwargs)
 
-        mask = ops.process.find_tubulin_background(tubulin,nuclei,**kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mask = ops.process.find_tubulin_background(tubulin,nuclei,**kwargs)
 
         try:
             # skimage precision warning
