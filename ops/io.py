@@ -219,7 +219,7 @@ def read_hdf_image(filename,bbox=None,array_name='image',memoize=False):
         else:
             image = image_node[...]
     except:
-        print('error in reading image array from hdf file')
+        print('error in reading image array from hdf file for {}'.format(filename))
         image = None
     if not memoize:
         hdf_file.close()
