@@ -298,7 +298,7 @@ def csv_frame(files_or_search, tqdn=False, **kwargs):
         return pd.concat([read_csv(f) for f in files], sort=True)
 
 
-def gb_apply_parallel(df, cols, func, n_jobs=None, tqdn=True):
+def gb_apply_parallel(df, cols, func, n_jobs=None, tqdn=True, backend='loky'):
     if isinstance(cols, str):
         cols = [cols]
 
@@ -312,7 +312,7 @@ def gb_apply_parallel(df, cols, func, n_jobs=None, tqdn=True):
     if tqdn:
         from tqdm import tqdm_notebook 
         work = tqdm_notebook(work, str(cols))
-    results = Parallel(n_jobs=n_jobs)(delayed(func)(w) for w in work)
+    results = Parallel(n_jobs=n_jobs,backend=backend)(delayed(func)(w) for w in work)
 
     if isinstance(results[0], pd.DataFrame):
         arr = []
