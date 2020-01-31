@@ -115,12 +115,14 @@ def single_nd2_to_tif(file,mag='10X',zproject=False):
 
 
     with ND2Reader(file) as image:
-        if zproject:
-                image = image.max(axis=1)
-        image.iter_axes = 'z'
-        image.bundle_axes = 'cxy'
+        image.iter_axes = 'c'
+        image.bundle_axes = 'zxy'
         filename = ops.filenames.name_file(description)
-        save_stack(filename,np.array([im for im in image]))
+        if zproject:
+            output=np.array([np.max(im,axis=0) for im in image])
+        else:
+            output=np.array([im for im in image])
+        save_stack(filename,output)
 
 def tile_config(df,output_filename):
     """Generate tile configuration file from site position dataframe for use with FIJI grid collection stitching
