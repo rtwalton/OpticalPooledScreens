@@ -741,7 +741,12 @@ def min_max_feret_diameter(coords):
 
 	point_distances = np.array(list(starmap(cdist,zip(np.stack([antipodes[:,:2],antipodes[:,2:4]]),antipodes[None,:,4:6]))))
 
-	return antipodes[:,6].min(),point_distances.max()
+	try:
+		results = antipodes[:,6].min(),point_distances.max()
+	except:
+		results = np.nan,np.nan
+
+	return results
 
 # def minimum_feret_diameter(coords):
 # 	hull_vertices = coords[ConvexHull(coords).vertices]
