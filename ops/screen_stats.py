@@ -3,7 +3,7 @@ import pandas as pd
 
 from ops.constants import *
 from ops.utils import groupby_histogram, groupby_reduce_concat
-from scipy.stats import wasserstein_distance, ks_2samp, ttest_ind
+from scipy.stats import wasserstein_distance, ks_2samp, ttest_ind, kstest
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -118,3 +118,22 @@ def plot_distributions_old(df_dist):
      .add_legend(legend_data=legend_data)
     )
     return fg
+
+def generalized_log(y,offset=0):
+    return np.log((y + np.sqrt(y**2 + offset))/2)
+
+def feature_normality_test(df,columns='all'):
+    """tests for normality of feature distributions using the KS-test
+    """
+    if columns == 'all':
+        columns = df.columns
+        
+    results = []
+    
+    for col in columns:
+        values=df[col].values
+        standardized = (values-values.mean())/values.std()
+        ks_result = kstest(standardized,'norm')
+        results.append({'feature':col,'ks_statistic':ks_result[0],'p_value':ks_result[1]})
+        
+    return pd.DataFrame(results)
