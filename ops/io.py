@@ -14,6 +14,7 @@ from ops.external.tifffile_old import imsave
 from nd2reader import ND2Reader
 # from ops.io_hdf import read_hdf_image
 import tables
+import zarr
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
@@ -38,6 +39,60 @@ def read_lut(lut_string):
 
 
 GLASBEY = read_lut(ops.constants.GLASBEY_INVERTED)
+
+def save_zarr(filename,image,chunks=False,compressor=None,store_type='default'):
+    if store_type == 'default':
+        z = zarr.open(filename,mode='w',shape=image.shape,chunks=chunks,compressor=compressor)
+        z[:] = image
+    elif store_type == 'lmdb':
+        with zarr.LMDBStore(filename) as store:
+            z = zarr.open(store=store,mode='w',shape=image.shape,chunks=chunks,compressor=compressor)
+            z[:] = image
+    else:
+        print('zarr store type unknown or not implemented')
+
+def read_zarr(filename,bbox=None,memoize=False):
+    """reads in image from hdf file with given bbox. significantly (~100x) faster when reading in a
+    100x100 pixel chunk compared to reading in an entire 1480x1480 tif.
+    WARNING: metadata is read into cache on first access; if file metadata changes, re-reading the file will 
+    cause problems. Simple work-around: delete file, try reading in (error), replace with new file, read in.
+    """
+    if memoize:
+        open_zarr_file.keys['active']=True
+
+    # store,zarr_file = open_zarr_file(filename)
+    store = open_zarr_store(filename)
+    array = zarr.open(store=store,mode='r')
+    if bbox is not None:
+        #check if bbox is in image bounds
+        i0, j0 = max(bbox[0], 0), max(bbox[1], 0)
+        i1, j1 = min(bbox[2], array.shape[-2]), min(bbox[3], array.shape[-1])
+        image = array[...,i0:i1,j0:j1]
+    else:
+        image = array[:]
+    # if not memoize:
+    #     store.close()
+    return image
+
+def slice_array(array,bbox):
+    i0, j0 = max(bbox[0], 0), max(bbox[1], 0)
+    i1, j1 = min(bbox[2], array.shape[-2]), min(bbox[3], array.shape[-1])
+    return array[...,i0:i1,j0:j1]
+
+
+@ops.utils.memoize(active=False, copy_numpy=False)
+def open_zarr_store(filename):
+    """Open a zarr file directory into a python object, with optional caching of object.
+    """
+    if filename.split('.')[-1] == 'lmdb':
+        store = zarr.LMDBStore(filename,buffers=True)
+    else:
+        store = zarr.DirectoryStore(filename)
+
+    # zarr_file = zarr.open(store=store,mode='r')
+    # zarr_file = zarr.open(path=filename,mode='r')
+    # return store,zarr_file
+    return store
 
 def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
     nd2_file_pattern = [
