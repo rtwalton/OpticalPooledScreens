@@ -137,8 +137,12 @@ def build_discrete_lut(colors):
     provided (zero value is usually black). Color values should be understood 
     by `sns.color_palette` (e.g., "blue", (1, 0, 0), or "#0000ff").
     """
-    import seaborn as sns
-    colors = 255 * np.array(sns.color_palette(colors))
+    try:
+        import seaborn as sns
+        colors = sns.color_palette(colors)
+    except:
+        pass
+    colors = 255 * np.array(colors)
 
     # try to match ImageJ LUT rounding convention
     m = len(colors)
@@ -153,6 +157,7 @@ def build_discrete_lut(colors):
 def bitmap_line(s):
     """Draw text using Visitor font (characters are 5x5 pixels).
     """
+    import PIL.ImageDraw
     img = PIL.Image.new("RGBA", (len(s) * 8, 10), (0, 0, 0))
     draw = PIL.ImageDraw.Draw(img)
     draw.text((0, 0), s, (255, 255, 255), font=VISITOR_FONT)
@@ -189,7 +194,7 @@ def colors_to_imagej_lut(lut_values):
 
 def build_GRMC():
     import seaborn as sns
-    colors = (0, 1, 0, 1), 'red', 'magenta', 'cyan'
+    colors = (0, 1, 0), (1, 0, 0), (1, 0, 1), (0, 1, 1)
     lut = []
     for color in colors:
         lut.append([0, 0, 0, 1])
@@ -223,7 +228,7 @@ def add_base_codes(df_reads, bases, offset, col):
 
 def annotate_bases(df_reads, col='barcode', bases='GTAC', offset=1, **kwargs):
     """
-    from ops.annotate import add_base_codes, label_bases, GRMC
+    from ops.annotate import add_base_codes, GRMC
     labels = annotate_bases(df_reads)
     # labels = annotate_bases(df_cells, col='cell_barcode_0')
 
