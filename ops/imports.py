@@ -20,6 +20,7 @@ import ops.io
 import ops.io_hdf
 import ops.process
 import ops.utils
+from ops.annotate import GRMC
 from ops.io import BLUE, GREEN, RED, MAGENTA, GRAY, CYAN, GLASBEY 
 from ops.io import grid_view
 from ops.filenames import name_file as name

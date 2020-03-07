@@ -76,6 +76,19 @@ def _memoize(f, *args, **kwargs):
     
 
 # PANDAS
+def natsort_values(df, cols, ascending=True):
+    """Substitute for pd.DataFrame.sort_values
+    """
+    from natsort import index_natsorted
+    if not isinstance(cols, list):
+        cols = [cols]
+    values = np.array([np.argsort(index_natsorted(df[c])) for c in cols]).T
+    ix = (pd.DataFrame(values, columns=cols)
+          .sort_values(cols, ascending=ascending)
+          .index)
+    return df.iloc[list(ix)].copy()
+
+
 def bin_join(xs, symbol):
     symbol = ' ' + symbol + ' ' 
     return symbol.join('(%s)' % x for x in xs)
@@ -176,6 +189,15 @@ def groupby_apply2(df_1, df_2, cols, f, tqdn=True):
     return pd.concat(arr)    
 
 
+def groupby_apply_norepeat(gb, f, *args, **kwargs):
+    """Avoid double calling on first group.
+    """
+    arr = []
+    for _, df in gb:
+        arr += [f(df, *args, **kwargs)]
+    return pd.concat(arr)
+
+
 def ndarray_to_dataframe(values, index):
     names, levels  = zip(*index)
     columns = pd.MultiIndex.from_product(levels, names=names)
@@ -204,15 +226,6 @@ def uncategorize(df, as_codes=False):
         else:
             df[col] = np.asarray(df[col])
     return df
-
-
-def natsort_values(df, columns):
-    from natsort import natsorted
-    data = df[columns].copy()
-    uncategorize(data, as_codes=True)
-    keys = [(val, i) for i, val in enumerate(data.values)]
-    index = [i for _, i in natsorted(keys)]
-    return df.iloc[index]
 
 
 def rank_by_order(df, groupby_columns):

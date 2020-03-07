@@ -157,6 +157,7 @@ def build_discrete_lut(colors):
 def bitmap_line(s):
     """Draw text using Visitor font (characters are 5x5 pixels).
     """
+    import PIL.Image
     import PIL.ImageDraw
     img = PIL.Image.new("RGBA", (len(s) * 8, 10), (0, 0, 0))
     draw = PIL.ImageDraw.Draw(img)
@@ -225,6 +226,7 @@ def add_base_codes(df_reads, bases, offset, col):
           .rename(columns=lambda x: 'c{0}'.format(x+1))
          )
     return pd.concat([df_reads, df + offset], axis=1)
+
 
 def annotate_bases(df_reads, col='barcode', bases='GTAC', offset=1, **kwargs):
     """

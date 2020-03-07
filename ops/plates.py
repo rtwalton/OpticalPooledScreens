@@ -13,22 +13,25 @@ def to_pixel_xy(df):
     return df
 
 
-def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.,snake_remap=False):
+def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.,snake_remap=False,
+    ij=('i', 'j'), xy=('x', 'y'), tile='tile'):
     """Adds global x and y coordinates to a dataframe with 
     columns indicating (i, j) or (x, y) positions. 
     """
     
+    I, J = ij
+    X, Y = xy
     df = df.copy()
     wt = list(zip(df['well'], df['tile']))
     d = {(w,t): plate_coordinate(w, t, well_spacing, grid_spacing, grid_shape,snake_remap) for w,t in set(wt)}
     y, x = zip(*[d[k] for k in wt])
 
     if 'x' in df:
-        df['global_x'] = x + df['x'] * factor
-        df['global_y'] = y + df['y'] * factor
+        df['global_x'] = x + df[X] * factor
+        df['global_y'] = y + df[Y] * factor
     elif 'i' in df:
-        df['global_x'] = x + df['j'] * factor
-        df['global_y'] = y + df['i'] * factor
+        df['global_x'] = x + df[J] * factor
+        df['global_y'] = y + df[I] * factor
     else:
         df['global_x'] = x
         df['global_y'] = y
