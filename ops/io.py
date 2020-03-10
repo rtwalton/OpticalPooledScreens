@@ -16,6 +16,7 @@ from nd2reader import ND2Reader
 import tables
 import zarr
 
+
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
                               '\nunit=\\u00B5m\nspacing=8.0\nloop=false\n',
@@ -94,7 +95,8 @@ def open_zarr_store(filename):
     # return store,zarr_file
     return store
 
-def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
+def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=True):
+
     nd2_file_pattern = [
                 (r'(?P<cycle>c[0-9]+)?/?'
                 '(?P<dataset>.*)?/?'
@@ -121,29 +123,45 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy'):
     if len(channels)==1:
         fov_axes='xy'
 
+    def process_site(site,image):
+        if zproject:
+                image = image.max(axis=1)
+        filename = ops.filenames.name_file(description,site=str(site))
+        save_stack(filename,image[:])
+
+        metadata = {'filename':ops.filenames.name_file(description,site=str(site)),
+        'field_of_view':site,
+        'x':image.metadata['x_data'][site],
+        'y':image.metadata['y_data'][site],
+        'z':image.metadata['z_data'][site],
+        'pfs_offset':image.metadata['pfs_offset'][site],
+        'pixel_size':image.metadata['pixel_microns']
+        }
+        return metadata
+
     with ND2Reader(file) as images:
         images.iter_axes='v'
         images.bundle_axes = fov_axes
 
-        well_metadata = []
+        if tqdm:
+            import tqdm.notebook
+            tqdn = tqdm.notebook.tqdm
+            work = tqdn(zip(images.metadata['fields_of_view'],images))
+        else:
+            work = zip(images.metadata['fields_of_view'],images)
 
-        for site,image in zip(images.metadata['fields_of_view'],images):
-            if zproject:
-                image = image.max(axis=1)
-            filename = ops.filenames.name_file(description,site=str(site))
-            save_stack(filename,image[:])
+        if n_threads!=1:
+            from joblib import Parallel,delayed
 
-        well_metadata = [{
-                            'filename':ops.filenames.name_file(description,site=str(site)),
-                            'field_of_view':site,
-                            'x':images.metadata['x_data'][site],
-                            'y':images.metadata['y_data'][site],
-                            'z':images.metadata['z_data'][site],
-                            'pfs_offset':images.metadata['pfs_offset'][0],
-                            'pixel_size':images.metadata['pixel_microns']
-                        } for site in images.metadata['fields_of_view']]
-        metadata_filename = ops.filenames.name_file(description,tag='metadata',ext='pkl')
-        pd.DataFrame(well_metadata).to_pickle(metadata_filename)
+            well_metadata = Parallel(n_jobs=n_threads,backend='threading')(delayed(process_site)(site,image) 
+                for site,image in work)
+        else:
+            well_metadata = []
+            for site,image in work:
+                well_metadata.append(process_site(site,image))
+
+    metadata_filename = ops.filenames.name_file(description,subdir=None,tag='metadata',ext='pkl')
+    pd.DataFrame(well_metadata).to_pickle(metadata_filename)
 
 def single_nd2_to_tif(file,mag='10X',zproject=False):
     nd2_file_pattern = [
