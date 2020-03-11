@@ -14,7 +14,7 @@ from ops.external.tifffile_old import imsave
 from nd2reader import ND2Reader
 # from ops.io_hdf import read_hdf_image
 import tables
-import zarr
+# import zarr
 
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
