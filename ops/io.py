@@ -105,7 +105,8 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Tr
                 '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
                 '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
                 '((?P<channel_4>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_5>[^_,]+)(_[^_]*)?)?'
+                '((?P<channel_5>[^_,]+)(_[^,]*)?)?,?'
+                '((?P<channel_6>[^_,]+)(_[^_]*)?)?'
                 '_Seq([0-9]+).nd2')
                ]
 
