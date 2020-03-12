@@ -20,6 +20,7 @@ ipywidgets==7.3.2
 isort==4.3.4
 jedi==0.12.1
 Jinja2==2.10.1
+joblib==0.13.2
 jsonschema==2.6.0
 jupyter==1.0.0
 jupyter-client==5.2.3
