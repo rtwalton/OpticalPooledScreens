@@ -30,34 +30,6 @@ class Snake():
     """
 
     @staticmethod
-    def _calculate_illumination_correction(data, smooth=200, rescale=True):
-        """calculate illumination correction field for use with apply_illumination_correction 
-        Snake method. Equivalent to CellProfiler's CorrectIlluminationCalculate module with 
-        option "Regular", "All", "Median Filter"
-        Note: algorithm originally benchmarked using ~250 images per plate to calculate plate-wise
-        illumination correction functions (Singh et al. J Microscopy, 256(3):231-236, 2014)
-        """
-        data = np.array(data).astype(np.uint16) # dimensions of (FOV, CHANNEL, I, J)
-
-        averaged = data.mean(axis=0).astype(np.uint16)
-
-        selem = skimage.morphology.disk(smooth,dtype=np.uint16)
-
-        median_filter = ops.utils.applyIJ(skimage.filters.median)
-
-        smoothed = median_filter(averaged,selem)
-
-        if rescale:
-            # use 2nd percentile for robust minimum
-            robust_mins = np.quantile(smoothed.reshape(smooth.shape[0],-1),q=0.02,axis=1)
-            robust_mins[robust_mins==0] = 1
-
-            smoothed = np.array([smoothed[ch]/robust_mins[ch] for ch in range(smoothed.shape[0])])
-            smoothed[smoothed<1] = 1
-
-        return smoothed
-
-    @staticmethod
     def _apply_illumination_correction(raw, correction):
         corrected = (raw/correction).astype(np.uint16)
 

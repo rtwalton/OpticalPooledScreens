@@ -112,6 +112,57 @@ def find_peaks(data, n=5):
     
     return peaks
 
+def calculate_illumination_correction(files, smooth=None, rescale=True, threading=False):
+    """calculate illumination correction field for use with apply_illumination_correction 
+    Snake method. Equivalent to CellProfiler's CorrectIlluminationCalculate module with 
+    option "Regular", "All", "Median Filter"
+    Note: algorithm originally benchmarked using ~250 images per plate to calculate plate-wise
+    illumination correction functions (Singh et al. J Microscopy, 256(3):231-236, 2014)
+    """
+    from ops.io import read_stack as read
+
+    N = len(files)
+
+    global data
+
+    data = read(files[0])/N
+
+    def accumulate_image(file):
+        global data
+        data += read(file)/N
+
+    if threading:
+        from joblib import Parallel, delayed
+        Parallel(n_jobs=-1,require='sharedmem')(delayed(accumulate_image)(file) for file in files[1:])
+    else:
+        for file in files[1:]:
+            accumulate_image(file)
+
+    data = data.astype(np.uint16)
+
+    if not smooth:
+        # default is 1/20th area of image
+        # smooth = (np.array(data.shape[-2:])/8).mean().astype(int)
+        smooth = int(np.sqrt((data.shape[-1]*data.shape[-2])/(np.pi*20)))
+
+    selem = skimage.morphology.disk(smooth)
+
+    median_filter = ops.utils.applyIJ(skimage.filters.median)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        smoothed = median_filter(data,selem,behavior='rank')
+
+    if rescale:
+        # use 2nd percentile for robust minimum
+        robust_mins = np.quantile(smoothed.reshape(smoothed.shape[0],-1),q=0.02,axis=1)
+        robust_mins[robust_mins==0] = 1
+
+        smoothed = np.array([smoothed[ch]/robust_mins[ch] for ch in range(smoothed.shape[0])])
+        smoothed[smoothed<1] = 1
+
+    return smoothed
+
 @ops.utils.applyIJ
 def log_ndi(data, sigma=1, *args, **kwargs):
     """Apply laplacian of gaussian to each image in a stack of shape
