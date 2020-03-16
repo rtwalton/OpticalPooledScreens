@@ -15,7 +15,12 @@ FILE_PATTERN = [
         r'(MAX_)?(?P<mag>[0-9]+X).',
         r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?',
         r'(?P<well>[A-H][0-9]{1,2})',
-        r'([_-](?P<channel>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)*?',
+        r'([_-](?P<channel_1>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)?',
+        r'([_-](?P<channel_2>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)?',
+        r'([_-](?P<channel_3>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)?',
+        r'([_-](?P<channel_4>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)?',
+        r'([_-](?P<channel_5>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)?',
+        r'([_-](?P<channel_6>((DAPI-GFP)|(DAPI)|(GFP)|(CY3)|(A594)|(CY5)|(CY7)|(AF750)))(_(1x1)|([0-9]+p))?)*?',
         r'(?:[_-]Site[_-](?P<site>([0-9]+)))?',
         r'(?:_Tile-(?P<tile>([0-9]+)))?',
         r'(?:\.(?P<tag>.*))*\.(?P<ext>.*)']
