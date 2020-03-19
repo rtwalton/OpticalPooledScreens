@@ -30,8 +30,8 @@ class Snake():
     """
 
     @staticmethod
-    def _apply_illumination_correction(raw, correction):
-        corrected = (raw/correction).astype(np.uint16)
+    def _apply_illumination_correction(data, correction):
+        corrected = (data/correction).astype(np.uint16)
 
         return corrected
 
@@ -77,7 +77,7 @@ class Snake():
             #stack channels in common
             stacked = np.concatenate([data[0][:,extra:],np.array([data[cycle] for cycle in range(1,data.shape[0])])],axis=0)
             #copy extra channels across other cycles
-            stacked = np.concatenate((np.array([data[0][0,:extra]]*8),stacked),axis=1)
+            stacked = np.concatenate((np.array([data[0][0,:extra]]*len(cycle_files)),stacked),axis=1)
         else:
             extra = 0
             stacked = data
@@ -187,15 +187,18 @@ class Snake():
         """
         if data.ndim == 4:
             # no DAPI, min over cycles, mean over channels
-            mask = data[:, 1:].astype(np.uint16).min(axis=0).mean(axis=0)
+            mask = data[:, 1:].min(axis=0).mean(axis=0)
         elif data.ndim == 3:
-            mask = np.median(data[1:].astype(np.uint16), axis=0)
+            mask = np.median(data[1:], axis=0)
         elif data.ndim == 2:
-            mask = data.astype(np.uint16)
+            mask = data
         else:
             raise ValueError
 
         mask = mask > threshold
+        # at least get nuclei shape in cells image -- helpful for mapping reads to cells
+        # at edge of FOV
+        mask += nuclei.astype(bool)
         try:
             # skimage precision warning
             with warnings.catch_warnings():
@@ -263,7 +266,7 @@ class Snake():
             data = remove_channels(data, remove_index)
 
         # for 1-cycle experiments
-        if len(data.shape==3):
+        if len(data.shape)==3:
             data = data[:,None,...]
 
         # leading_dims = tuple(range(0, data.ndim - 2))
@@ -336,7 +339,7 @@ class Snake():
         return df_bases
 
     @staticmethod
-    def _call_reads(df_bases, correction_quartile=0, peaks=None, correction_only_in_cells=True, subtract_min=False):
+    def _call_reads(df_bases, correction_quartile=0, peaks=None, correction_only_in_cells=True, correction_by_cycle=False, subtract_channel_min=False):
         """Median correction performed independently for each tile.
         Use the `correction_only_in_cells` flag to specify if correction
         is based on reads within cells, or all reads.
@@ -347,7 +350,7 @@ class Snake():
         if correction_only_in_cells:
             if len(df_bases.query('cell > 0')) == 0:
                 return
-        if subtract_min:
+        if subtract_channel_min:
             df_bases['intensity'] = df_bases['intensity'] - df_bases.groupby([WELL,TILE,CELL,READ,CHANNEL])['intensity'].transform('min')
         
         cycles = len(set(df_bases['cycle']))
@@ -356,7 +359,9 @@ class Snake():
         df_reads = (df_bases
             .pipe(ops.in_situ.clean_up_bases)
             .pipe(ops.in_situ.do_median_call, cycles, channels=channels,
-                correction_only_in_cells=correction_only_in_cells, correction_quartile=correction_quartile)
+                correction_only_in_cells=correction_only_in_cells, 
+                correction_by_cycle=correction_by_cycle, 
+                correction_quartile=correction_quartile)
             )
 
         if peaks is not None:

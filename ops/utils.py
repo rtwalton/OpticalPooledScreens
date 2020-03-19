@@ -13,9 +13,9 @@ import pandas as pd
 
 # PYTHON
 def combine_tables(tag,output_filetype='hdf',subdir='process'):
-    files = glob.glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
+    files = glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
     arr = []
-    for f in tqdn(files):
+    for f in files:
         try:
             arr += [pd.read_csv(f)]
         except pd.errors.EmptyDataError:
@@ -692,7 +692,7 @@ def regionprops(labeled, intensity_image):
     else:
         base_image = intensity_image[..., 0, :, :]
 
-    regions = skimage.measure.regionprops(labeled, intensity_image=base_image,coordinates='xy')
+    regions = skimage.measure.regionprops(labeled, intensity_image=base_image)
 
     for region in regions:
         b = region.bbox

@@ -34,23 +34,32 @@ def format_bases(values, labels, positions, cycles, bases):
 
     return df
 
-
-def do_median_call(df_bases, cycles=12, channels=4, correction_quartile=0, correction_only_in_cells=False):
+def do_median_call(df_bases, cycles=12, channels=4, correction_quartile=0, correction_only_in_cells=False, correction_by_cycle=False):
     """Call reads from raw base signal using median correction. Use the 
-    `correction_within_cells` flag to specify if correction is based on reads within 
+    `correction_only_in_cells` flag to specify if correction is based on reads within 
     cells, or all reads.
     """
-    if correction_only_in_cells:
-        # first obtain transformation matrix W
-        X_ = dataframe_to_values(df_bases.query('cell > 0'))
-        _, W = transform_medians(X_.reshape(-1, channels),correction_quartile=correction_quartile)
+    def correction(df,channels,correction_quartile,correction_only_in_cells):
+        if correction_only_in_cells:
+            # first obtain transformation matrix W
+            X_ = dataframe_to_values(df.query('cell > 0'))
+            _, W = transform_medians(X_.reshape(-1, channels),correction_quartile=correction_quartile)
 
-        # then apply to all data
-        X = dataframe_to_values(df_bases)
-        Y = W.dot(X.reshape(-1, channels).T).T.astype(int)
+            # then apply to all data
+            X = dataframe_to_values(df)
+            Y = W.dot(X.reshape(-1, channels).T).T.astype(int)
+        else:
+            X = dataframe_to_values(df)
+            Y, W = transform_medians(X.reshape(-1, channels),correction_quartile=correction_quartile)
+        return Y,W
+
+    if correction_by_cycle:
+        # this hasn't worked in practice very well, unclear why
+        Y = np.empty(df_bases.pipe(len),dtype=df_bases.dtypes['intensity']).reshape(-1,channels)
+        for cycle, (_, df_cycle) in enumerate(df_bases.groupby('cycle')):
+            Y[cycle::cycles,:],_ = correction(df_cycle,channels,correction_quartile,correction_only_in_cells)
     else:
-        X = dataframe_to_values(df_bases)
-        Y, W = transform_medians(X.reshape(-1, channels),correction_quartile=correction_quartile)
+        Y,W = correction(df_bases,channels,correction_quartile,correction_only_in_cells)
 
     df_reads = call_barcodes(df_bases, Y, cycles=cycles, channels=channels)
 
@@ -95,7 +104,7 @@ def call_cells(df_reads):
 def call_cells_mapping(df_reads,df_pool):
     """Determine count of top barcodes, barcodes prioritized if barcode maps to given pool design
     """
-    guide_info_cols = [SGRNA,SGRNA_NAME,GENE_SYMBOL,GROUP]
+    guide_info_cols = [SGRNA,GENE_SYMBOL,GROUP]
 
     # map reads
     df_mapped = (pd.merge(df_reads,df_pool[[PREFIX]],how='left',left_on=BARCODE,right_on=PREFIX)
