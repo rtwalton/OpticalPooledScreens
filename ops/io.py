@@ -95,22 +95,23 @@ def open_zarr_store(filename):
     # return store,zarr_file
     return store
 
-def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=True):
+def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=True, file_pattern=None):
 
-    nd2_file_pattern = [
-                (r'(?P<cycle>c[0-9]+)?/?'
-                '(?P<dataset>.*)?/?'
-                'Well(?P<well>[A-H][0-9]*)_'
-                'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_4>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_5>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_6>[^_,]+)(_[^_]*)?)?'
-                '_Seq([0-9]+).nd2')
-               ]
+    if file_pattern is None:
+        file_pattern = [
+                    (r'(?P<cycle>c[0-9]+)?/?'
+                    '(?P<dataset>.*)?/?'
+                    'Well(?P<well>[A-H][0-9]*)_'
+                    'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
+                    '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
+                    '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
+                    '((?P<channel_4>[^_,]+)(_[^,]*)?)?,?'
+                    '((?P<channel_5>[^_,]+)(_[^,]*)?)?,?'
+                    '((?P<channel_6>[^_,]+)(_[^_]*)?)?'
+                    '_Seq([0-9]+).nd2')
+                   ]
 
-    description = ops.filenames.parse_filename(file,custom_patterns=nd2_file_pattern)
+    description = ops.filenames.parse_filename(file,custom_patterns=file_pattern)
     description['ext']='tif'
     description['mag']=mag
     try:
@@ -122,11 +123,12 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Tr
     channels = [ch for key,ch in description.items() if key.startswith('channel')]
 
     if len(channels)==1:
-        fov_axes='xy'
+        fov_axes=fov_axes[1:]
 
     def process_site(site,image):
         if zproject:
-                image = image.max(axis=1)
+                z_axis = fov_axes.find('z')
+                image = image.max(axis=z_axis)
         filename = ops.filenames.name_file(description,site=str(site))
         save_stack(filename,image[:])
 
@@ -161,7 +163,7 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Tr
             for site,image in work:
                 well_metadata.append(process_site(site,image))
 
-    metadata_filename = ops.filenames.name_file(description,subdir=None,tag='metadata',ext='pkl')
+    metadata_filename = ops.filenames.name_file(description,subdir='metadata',tag='metadata',ext='pkl')
     pd.DataFrame(well_metadata).to_pickle(metadata_filename)
 
 def single_nd2_to_tif(file,mag='10X',zproject=False):
