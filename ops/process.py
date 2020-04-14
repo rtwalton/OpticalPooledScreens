@@ -154,12 +154,16 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
         smoothed = median_filter(data,selem,behavior='rank')
 
     if rescale:
-        # use 2nd percentile for robust minimum
-        robust_mins = np.quantile(smoothed.reshape(smoothed.shape[0],-1),q=0.02,axis=1)
-        robust_mins[robust_mins==0] = 1
+        @ops.utils.applyIJ
+        def rescale_channels(data):
+            # use 2nd percentile for robust minimum
+            robust_min = np.quantile(data.reshape(-1),q=0.02)
+            robust_min = 1 if robust_min == 0 else robust_min
+            data = data/robust_min
+            data[data<1] = 1 
+            return data
 
-        smoothed = np.array([smoothed[ch]/robust_mins[ch] for ch in range(smoothed.shape[0])])
-        smoothed[smoothed<1] = 1
+        smoothed = rescale_channels(smoothed)
 
     return smoothed
 
