@@ -95,7 +95,7 @@ def open_zarr_store(filename):
     # return store,zarr_file
     return store
 
-def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=True, file_pattern=None):
+def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=True, file_pattern=None, sites='all'):
 
     if file_pattern is None:
         file_pattern = [
@@ -146,12 +146,15 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Tr
         images.iter_axes='v'
         images.bundle_axes = fov_axes
 
+        if sites=='all':
+            sites = slice(None)
+
         if tqdm:
             import tqdm.notebook
             tqdn = tqdm.notebook.tqdm
-            work = tqdn(zip(images.metadata['fields_of_view'],images))
+            work = tqdn(zip(images.metadata['fields_of_view'][sites],images[sites]))
         else:
-            work = zip(images.metadata['fields_of_view'],images)
+            work = zip(images.metadata['fields_of_view'][sites],images[sites])
 
         if n_threads!=1:
             from joblib import Parallel,delayed
