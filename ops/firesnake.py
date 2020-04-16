@@ -381,6 +381,8 @@ class Snake():
                 .query('Q_min >= @q_min')
                 .pipe(ops.in_situ.call_cells))
         else:
+            prefix_length = len(df_reads.iloc[0].barcode) # get the experimental prefix length, i.e., the number of completed SBS cycles
+            df_pool[PREFIX] = df_pool.apply(lambda x: x.sgRNA[:prefix_length],axis=1)
             return (df_reads
                 .query('Q_min >= @q_min')
                 .pipe(ops.in_situ.call_cells_mapping,df_pool))
