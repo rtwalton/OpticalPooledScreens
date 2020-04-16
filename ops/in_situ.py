@@ -171,7 +171,10 @@ def transform_medians(X,correction_quartile=0):
         arr = []
         for i in range(X.shape[1]):
             max_spots = X[X.argmax(axis=1) == i]
-            arr += [np.median(max_spots[max_spots[:,i] >= np.quantile(max_spots,axis=0,q=correction_quartile)[i]],axis=0)]
+            try:
+                arr += [np.median(max_spots[max_spots[:,i] >= np.quantile(max_spots,axis=0,q=correction_quartile)[i]],axis=0)]
+            except:
+                arr += [np.median(max_spots,axis=0)]
         M = np.array(arr)
         return M
 
