@@ -95,7 +95,7 @@ def open_zarr_store(filename):
     # return store,zarr_file
     return store
 
-def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=True, file_pattern=None, sites='all'):
+def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=False, file_pattern=None, sites='all'):
 
     if file_pattern is None:
         file_pattern = [

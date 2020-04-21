@@ -133,6 +133,27 @@ class Snake():
         return aligned
 
     @staticmethod
+    def _align_phenotype_channels(data,target,source,riders=[],upsample_factor=2, window=2, remove=False):
+        windowed = Align.apply_window(data[[target,source]],window)
+        # remove noise?
+        offsets = Align.calculate_offsets(windowed,upsample_factor=upsample_factor)
+        if not isinstance(riders,list):
+            riders = [riders]
+        full_offsets = np.zeros((data.shape[0],2))
+        full_offsets[[source]+riders] = offsets[1]
+        aligned = Align.apply_offsets(data, full_offsets)
+        if remove == 'target':
+            channel_order = list(range(data.shape[0]))
+            channel_order.remove(source)
+            channel_order.insert(target+1,source)
+            aligned = aligned[channel_order]
+            aligned = remove_channels(aligned, target)
+        elif remove == 'source':
+            aligned = remove_channels(aligned, source)
+
+        return aligned
+
+    @staticmethod
     def _stack_channels(data):
         arr = []
         for dataset in data:
@@ -504,7 +525,9 @@ class Snake():
         
         import ops.morphology_features
 
-        df =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear))
+        df =  (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
+            .rename(columns={'label':'cell'})
+            )
 
         return df
 
