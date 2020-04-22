@@ -1,7 +1,7 @@
 
 # import mahotas 
 import numpy as np
-from astropy.stats import median_absolute_deviation
+from scipy.stats import median_absolute_deviation
 from ops.features import correlate_channels_masked, masked
 
 def masked_rect(r,index):
@@ -31,7 +31,7 @@ features_nuclear = {
     'dapi_nuclear_max'   : lambda r: masked(r, 0).max(),
     'dapi_nuclear_int'   : lambda r: masked(r, 0).sum(),
     'dapi_nuclear_sd': lambda r: np.std(masked(r,0)),
-    'dapi_nuclear_mad': lambda r: median_absolute_deviation(masked(r,0)),
+    'dapi_nuclear_mad': lambda r: median_absolute_deviation(masked(r,0),scale=1),
     # 'dapi_zernike_nuclear': lambda r: mahotas_zernike(r,0),
     # 'dapi_pftas_nuclear': lambda r: mahotas_pftas(r,0),
     'dm1a_nuclear_min': lambda r: np.min(masked(r,1)),
@@ -42,7 +42,7 @@ features_nuclear = {
     'dm1a_nuclear_max'    : lambda r: masked(r, 1).max(),
     'dm1a_nuclear_int'    : lambda r: masked(r, 1).sum(),
     'dm1a_nuclear_sd': lambda r: np.std(masked(r,1)),
-    'dm1a_nuclear_mad': lambda r: median_absolute_deviation(masked(r,1)),
+    'dm1a_nuclear_mad': lambda r: median_absolute_deviation(masked(r,1),scale=1),
     #
     'gh2ax_nuclear_min': lambda r: np.min(masked(r,2)),
     'gh2ax_nuclear_25': lambda r: np.percentile(masked(r, 2),25),
@@ -52,7 +52,7 @@ features_nuclear = {
     'gh2ax_nuclear_max'    : lambda r: masked(r, 2).max(),
     'gh2ax_nuclear_int'    : lambda r: masked(r, 2).sum(),
     'gh2ax_nuclear_sd': lambda r: np.std(masked(r,2)),
-    'gh2ax_nuclear_mad': lambda r: median_absolute_deviation(masked(r,2)),
+    'gh2ax_nuclear_mad': lambda r: median_absolute_deviation(masked(r,2),scale=1),
     #
     'phalloidin_nuclear_min': lambda r: np.min(masked(r,3)),
     'phalloidin_nuclear_25': lambda r: np.percentile(masked(r, 3),25),
@@ -62,7 +62,7 @@ features_nuclear = {
     'phalloidin_nuclear_max'    : lambda r: masked(r, 3).max(),
     'phalloidin_nuclear_int'    : lambda r: masked(r, 3).sum(),
     'phalloidin_nuclear_sd': lambda r: np.std(masked(r,3)),
-    'phalloidin_nuclear_mad': lambda r: median_absolute_deviation(masked(r,3)),     
+    'phalloidin_nuclear_mad': lambda r: median_absolute_deviation(masked(r,3),scale=1),     
     # 'dm1a_zernike_nuclear': lambda r: mahotas_zernike(r,1),
     # 'dm1a_pftas_nuclear': lambda r: mahotas_pftas(r,1),
     'dapi_dm1a_corr_nuclear': lambda r: correlate_channels_masked(r,0,1),
@@ -95,7 +95,7 @@ features_cell = {
     'channel_cell_max'    : lambda r: masked(r, 1).max(),
     'channel_cell_int'    : lambda r: masked(r, 1).sum(),
     'channel_cell_sd': lambda r: np.std(masked(r,1)),
-    'channel_cell_mad': lambda r: median_absolute_deviation(masked(r,1)),    
+    'channel_cell_mad': lambda r: median_absolute_deviation(masked(r,1),scale=1),    
     # 'channel_zernike_cell': lambda r: mahotas_zernike(r,1),
     # 'channel_pftas_cell': lambda r: mahotas_pftas(r,1),
     'dapi_cell_median'    : lambda r: np.median(masked(r, 0)),
