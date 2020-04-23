@@ -3,6 +3,7 @@ import pandas as pd
 from scipy.spatial import Delaunay
 from scipy.spatial.distance import cdist
 from sklearn.linear_model import RANSACRegressor, LinearRegression
+import warnings
 
 import ops.utils
 
@@ -162,9 +163,12 @@ def evaluate_match(df_0, df_1, threshold_triangle=0.3, threshold_point=2):
     if sum(filt) < 5:
         return None, None, -1
 
-    # use matching triangles to define transformation
-    model = RANSACRegressor()
-    model.fit(X, Y)
+    with warnings.catch_warnings():
+        # ignore all caught warnings
+        warnings.filterwarnings("ignore")
+        # use matching triangles to define transformation
+        model = RANSACRegressor()
+        model.fit(X, Y)
     
     rotation = model.estimator_.coef_
     translation = model.estimator_.intercept_
@@ -195,8 +199,11 @@ def prioritize(df_info_0, df_info_1, matches):
     """
     a = df_info_0.loc[matches[:, 0]].values
     b = df_info_1.loc[matches[:, 1]].values
-    model = RANSACRegressor(min_samples=2)
-    model.fit(a, b)
+    with warnings.catch_warnings():
+        # ignore all caught warnings
+        warnings.filterwarnings("ignore")
+        model = RANSACRegressor(min_samples=2)
+        model.fit(a, b)
 
     # rank all pairs by distance
     predicted = model.predict(df_info_0.values)
@@ -213,10 +220,13 @@ def remove_overlap(xs, ys):
     ys = set(map(tuple, ys))
     return [tuple(x) for x in xs if tuple(x) not in ys]
 
-def brute_force_pairs(df_0, df_1):
-    from tqdm import tqdm_notebook as tqdn
+def brute_force_pairs(df_0, df_1, n_jobs=-2,tqdm=True):
+    work = df_1.groupby('site')
+    if tqdm:
+        from tqdm import tqdm_notebook as tqdn
+        work = tqdn(work,'site')
     arr = []
-    for site, df_s in tqdn(df_1.groupby('site'), 'site'):
+    for site, df_s in work:
 
         def work_on(df_t):
             rotation, translation, score = evaluate_match(df_t, df_s)
@@ -228,7 +238,7 @@ def brute_force_pairs(df_0, df_1):
             return result
 
         (df_0
-         .pipe(ops.utils.gb_apply_parallel, 'tile', work_on)
+         .pipe(ops.utils.gb_apply_parallel, 'tile', work_on,n_jobs=n_jobs)
          .assign(site=site)
          .pipe(arr.append)
         )
@@ -246,13 +256,11 @@ def parallel_process(func, args_list, n_jobs, tqdn=True):
     return Parallel(n_jobs=n_jobs)(delayed(func)(*w) for w in work)
 
 
-def merge_sbs_phenotype(df_0_, df_1_, model):
+def merge_sbs_phenotype(df_0_, df_1_, model, threshold=2):
 
     X = df_0_[['i', 'j']].values
     Y = df_1_[['i', 'j']].values
     Y_pred = model.predict(X)
-
-    threshold = 2
 
     distances = cdist(Y, Y_pred, metric='sqeuclidean')
     ix = distances.argmin(axis=1)
@@ -303,7 +311,7 @@ def plot_alignments(df_ph, df_sbs, df_align, site):
     return ax
 
 def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.186),
-                        initial_sites=8, batch_size=180):
+                        initial_sites=8, batch_size=180, tqdm=True, n_jobs=-2):
     """Provide triangles from one well only. Intitial_sites can be a list of tuples with pre-determined
     matching pairs of sites [(tile_0,site_0),...]. Should be good with 5-8 initial sites.
     rotation: rotation matrix
@@ -335,7 +343,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
             .sample(initial_sites, replace=False, random_state=0)
             .pipe(list))
 
-        df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'))
+        df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'),tqdm=tqdm, n_jobs=n_jobs)
 
     # dets = df_initial.query('score > 0.3')['determinant']
     # d0, d1 = dets.min(), dets.max()
@@ -371,7 +379,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
         for ix_0, ix_1 in candidates[:batch_size]:
             work += [[d_0[ix_0], d_1[ix_1]]]    
 
-        df_align_new = (pd.concat(parallel_process(work_on, work, -2), axis=1).T
+        df_align_new = (pd.concat(parallel_process(work_on, work, n_jobs, tqdm=tqdm), axis=1).T
          .assign(tile=[t for t, _ in candidates[:batch_size]], 
                  site=[s for _, s in candidates[:batch_size]])
         )

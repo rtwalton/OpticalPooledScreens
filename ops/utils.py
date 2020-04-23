@@ -12,14 +12,21 @@ import pandas as pd
 
 
 # PYTHON
-def combine_tables(tag,output_filetype='hdf',subdir='process'):
+def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1):
     files = glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
-    arr = []
-    for f in files:
+
+    def get_file(f):
         try:
-            arr += [pd.read_csv(f)]
+            return pd.read_csv(f)
         except pd.errors.EmptyDataError:
-            pass        
+            pass
+
+    if n_jobs != 1:
+        from joblib import Parallel,delayed
+        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file) for file in files)
+    else:
+        arr = [get_file(file) for file in files]
+
     df = pd.concat(arr)
     if output_filetype=='csv':
         df.to_csv(tag+'.csv')
