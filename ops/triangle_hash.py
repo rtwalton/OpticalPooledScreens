@@ -247,10 +247,10 @@ def brute_force_pairs(df_0, df_1, n_jobs=-2,tqdm=True):
             .sort_values('score', ascending=False)
             )
 
-def parallel_process(func, args_list, n_jobs, tqdn=True):
+def parallel_process(func, args_list, n_jobs, tqdm=True):
     from joblib import Parallel, delayed
     work = args_list
-    if tqdn:
+    if tqdm:
         from tqdm import tqdm_notebook 
         work = tqdm_notebook(work, 'work')
     return Parallel(n_jobs=n_jobs)(delayed(func)(*w) for w in work)

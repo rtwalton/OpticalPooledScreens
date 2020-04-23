@@ -174,7 +174,7 @@ def groupby_histogram(df, index, column, bins, cumulative=False, normalize=False
            )
 
 
-def groupby_apply2(df_1, df_2, cols, f, tqdn=True):
+def groupby_apply2(df_1, df_2, cols, f, tqdm=True):
     """Apply a function `f` that takes two dataframes and returns a dataframe.
     Groups inputs by `cols`, evaluates for each group, and concatenates the result.
 
@@ -183,7 +183,7 @@ def groupby_apply2(df_1, df_2, cols, f, tqdn=True):
     d_1 = {k: v for k,v in df_1.groupby(cols)}
     d_2 = {k: v for k,v in df_2.groupby(cols)}
 
-    if tqdn:
+    if tqdm:
         from tqdm import tqdm_notebook
         progress = tqdm_notebook
     else:
@@ -294,7 +294,7 @@ def expand_sep(df, col, sep=','):
      .assign(**{col: values}))
 
 
-def csv_frame(files_or_search, tqdn=False, **kwargs):
+def csv_frame(files_or_search, tqdm=False, **kwargs):
     """Convenience function, pass either a list of files or a 
     glob wildcard search term.
     """
@@ -311,14 +311,14 @@ def csv_frame(files_or_search, tqdn=False, **kwargs):
     else:
         files = files_or_search
 
-    if tqdn:
+    if tqdm:
         from tqdm import tqdm_notebook as tqdn
         return pd.concat([read_csv(f) for f in tqdn(files)], sort=True)
     else:
         return pd.concat([read_csv(f) for f in files], sort=True)
 
 
-def gb_apply_parallel(df, cols, func, n_jobs=None, tqdn=True, backend='loky'):
+def gb_apply_parallel(df, cols, func, n_jobs=None, tqdm=True, backend='loky'):
     if isinstance(cols, str):
         cols = [cols]
 
@@ -329,7 +329,7 @@ def gb_apply_parallel(df, cols, func, n_jobs=None, tqdn=True, backend='loky'):
 
     grouped = df.groupby(cols)
     names, work = zip(*grouped)
-    if tqdn:
+    if tqdm:
         from tqdm import tqdm_notebook 
         work = tqdm_notebook(work, str(cols))
     results = Parallel(n_jobs=n_jobs,backend=backend)(delayed(func)(w) for w in work)
