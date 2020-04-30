@@ -178,12 +178,23 @@ def plot_read_mapping_heatmap(df_reads,df_pool,shape='6W_sbs',return_summary=Fal
 
     axes : np.array of matplotlib Axes objects
     """
-    df_summary  = (df_reads[['well','tile','barcode']]
-                   .merge(df_pool[['gene_symbol','sgRNA']].rename(columns={'sgRNA':'barcode'}),
-                          how='left',
-                          on='barcode'
-                         )
-                   .assign(mapped=lambda x: x['gene_symbol'].notna())
+    df_reads = df_reads[['well','tile','barcode']].assign(prefix_length=lambda x: x['barcode'].str.len())
+
+    # in some cases different wells will have different numbers of completed sbs cycles
+    df = pd.concat([df_prefix.merge((df_pool
+                                     [['sgRNA']]
+                                     .assign(barcode=lambda x: x['sgRNA'].str[:prefix_length])
+                                    ),
+                                    how='left',
+                                    on='barcode'
+                                   )
+                    for prefix_length,df_prefix
+                    in df_reads.groupby('prefix_length')
+                   ]
+                  )
+
+    df_summary  = (df
+                   .assign(mapped=lambda x: x['sgRNA'].notna())
                    .groupby(['well','tile'])
                    ['mapped']
                    .value_counts(normalize=True)
@@ -375,14 +386,18 @@ def plot_plate_heatmap(df,metric=None,shape='square',snake_sites=True,**kwargs):
                 try:
                     values[grid==tile] = df_well.loc[df_well.tile==tile,metric].values[0]
                 except:
-                    values[grid==tile] = -1
+                    values[grid==tile] = np.nan
             plot = ax.imshow(values,vmin=cmin,vmax=cmax,**kwargs)
         ax.set_title('Well {}'.format(well),fontsize=18)
         ax.axis('off')
     
     fig.subplots_adjust(right=0.9)
     cbar_ax = fig.add_axes([0.95, 0.15, 0.025, 0.7])
-    cbar = fig.colorbar(plot,cax=cbar_ax)
+    try:
+        cbar = fig.colorbar(plot,cax=cbar_ax)
+    except:
+        # plot variable empty, no data plotted
+        raise ValueError('No data to plot')
     cbar.set_label(metric,fontsize=18)
     cbar_ax.yaxis.set_ticks_position('left')
     
