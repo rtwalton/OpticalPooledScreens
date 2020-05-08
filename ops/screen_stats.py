@@ -14,7 +14,7 @@ def distribution_difference(df,col='dapi_gfp_corr',control_query='gene_symbol ==
       [col]
     )
     return df.groupby(groups).apply(lambda x:
-      scipy.stats.wasserstein_distance(x[col], y_neg))
+      wasserstein_distance(x[col], y_neg))
 
 def process_rep(df, value='dapi_gfp_corr_nuclear', 
                sgRNA_index=('sgRNA_name', 'gene_symbol')):
