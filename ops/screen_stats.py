@@ -8,7 +8,7 @@ from scipy.stats import wasserstein_distance, ks_2samp, ttest_ind, kstest
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def distribution_difference(df,col='dapi_gfp_corr',control_query='gene_symbol == "non-targeting', groups='gene_symbol'):
+def distribution_difference(df,col='dapi_gfp_corr',control_query='gene_symbol == "non-targeting"', groups='gene_symbol'):
     y_neg = (df
       .query(control_query)
       [col]
