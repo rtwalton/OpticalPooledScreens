@@ -8,6 +8,14 @@ from scipy.stats import wasserstein_distance, ks_2samp, ttest_ind, kstest
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+def distribution_difference(df,col='dapi_gfp_corr',control_query='gene_symbol == "non-targeting', groups='gene_symbol'):
+    y_neg = (df
+      .query(control_query)
+      [col]
+    )
+    return df.groupby(groups).apply(lambda x:
+      scipy.stats.wasserstein_distance(x[col], y_neg))
+
 def process_rep(df, value='dapi_gfp_corr_nuclear', 
                sgRNA_index=('sgRNA_name', 'gene_symbol')):
     """Calculate statistics for one replicate.
