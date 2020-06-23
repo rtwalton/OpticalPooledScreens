@@ -500,7 +500,7 @@ def maxy_clique_groups(cm, group_ids, verbose=False):
     return selected
 
 
-def sparse_dist_parallel(hash_buckets, min_distance, distance=None):
+def sparse_dist_parallel(hash_buckets, threshold, distance=None):
     from multiprocessing import Pool
 
     n = num_cores * 10
@@ -508,7 +508,7 @@ def sparse_dist_parallel(hash_buckets, min_distance, distance=None):
 
     arr = []
     for i, j in zip(ix, ix[1:]):
-        arr += [(hash_buckets[i:j], min_distance, distance)]
+        arr += [(hash_buckets[i:j], threshold, distance)]
 
     with Pool(num_cores) as p:
         results = p.starmap(sparse_dist, arr)
