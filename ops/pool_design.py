@@ -499,10 +499,10 @@ def maxy_clique_groups(cm, group_ids, verbose=False):
     return selected
 
 
-def sparse_dist_parallel(hash_buckets, min_distance, 
+def sparse_dist_parallel(hash_buckets, threshold, 
                         distance=distance_prefix):
     from multiprocessing import Pool
-    f = lambda xs: sparse_dist(xs, threshold=min_distance, 
+    f = lambda xs: sparse_dist(xs, threshold=threshold, 
                         distance=distance_prefix)
 
     n = num_cores * 10
