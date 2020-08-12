@@ -123,7 +123,7 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Fa
     channels = [ch for key,ch in description.items() if key.startswith('channel')]
 
     if len(channels)==1:
-        fov_axes=fov_axes[1:]
+        fov_axes=fov_axes.replace('c','')
 
     def process_site(site,image):
         if zproject:
