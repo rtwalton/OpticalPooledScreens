@@ -439,6 +439,30 @@ class Snake():
         return df
 
     @staticmethod
+    def _extract_phenotype_nuclei_cells(data_phenotype, nuclei, cells, features_n, features_c, wildcards):
+        if (nuclei.max() == 0) or (cells.max() == 0):
+            return
+
+        import ops.features
+
+        features_n = {k + '_nuclear': v for k,v in features_n.items()}
+        features_c = {k + '_cell': v    for k,v in features_c.items()}
+
+        df_n = (Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
+            .rename(columns={'area': 'area_nuclear'}))
+
+        df_c =  (Snake._extract_features(data_phenotype, cells, wildcards, features_c)
+            .drop(['i', 'j'], axis=1).rename(columns={'area': 'area_cell'}))
+
+
+        # inner join discards nuclei without corresponding cells
+        df = (pd.concat([df_n.set_index('label'), df_c.set_index('label')], axis=1, join='inner')
+                .reset_index())
+
+        return (df
+            .rename(columns={'label': 'cell'}))
+
+    @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
         """Features for frameshift reporter phenotyped in DAPI, HA channels.
         """
