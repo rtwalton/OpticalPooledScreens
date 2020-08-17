@@ -9,7 +9,15 @@ from collections import Counter
 from scipy.interpolate import UnivariateSpline
 from statsmodels.stats.multitest import multipletests
 
-
+def call_TrackMate(input_path, output_path='trackmate_output.txt', fiji_path='/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx'):
+    import subprocess, os
+    
+    cmd = '''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py "input_path='{input_path}',output_path='{output_path}'"'''
+    cmd = cmd.format(fiji_path=fiji_path,ops_path=ops.__path__[0],input_path=input_path,output_path=output_path)
+    
+    output = subprocess.check_output(cmd, shell=True)
+    print(output.decode("utf-8"))
+    
 def format_stats_wide(df_stats):
     index = ['gene_symbol']
     columns = ['stat_name', 'stimulant']
