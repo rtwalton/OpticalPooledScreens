@@ -4,6 +4,7 @@ Example _in situ_ sequencing-by-synthesis data (in `example_data/`) and analysis
 
 We are currently in the process of depositing complete screening datasets (paired in situ sequencing and p65 translocation phenotyping) in the [Cell-IDR database](https://idr.openmicroscopy.org/about/studies.html).
 
+**WARNING: many versions of dependencies will have trouble installing on Python 3.8. It is currently recommended to use Python 3.6. Setting up a Python 3.6 conda environment may be a convenient solution, set-up guide [here](https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#managing-python).**
 
 ### Installation (OSX)
 
