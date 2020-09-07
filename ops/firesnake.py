@@ -186,14 +186,21 @@ class Snake():
         return nuclei.astype(np.uint16)
 
     @staticmethod
-    def _segment_nuclei_stack(dapi, threshold, area_min, area_max):
+    def _segment_nuclei_stack(dapi, threshold, area_min, area_max, smooth=1.35, radius=15, n_jobs=1, tqdm=False):
         """Find nuclei from a nuclear stain (e.g., DAPI). Expects data to have shape (I, J) 
         (segments one image) or (N, I, J) (segments a series of DAPI images).
         """
         kwargs = dict(threshold=lambda x: threshold, 
-            area_min=area_min, area_max=area_max)
+            area_min=area_min, area_max=area_max,
+            smooth=smooth, radius=radius)
 
-        find_nuclei = ops.utils.applyIJ(ops.process.find_nuclei)
+        if n_jobs==1:
+            find_nuclei = ops.utils.applyIJ(ops.process.find_nuclei)
+        else:
+            kwargs['n_jobs']=n_jobs
+            kwargs['tqdm']=tqdm
+            find_nuclei = functools.partial(ops.utils.applyIJ_parallel,ops.process.find_nuclei)
+
         # skimage precision warning
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -425,8 +432,9 @@ class Snake():
         
         return df
 
+
     @staticmethod
-    def _extract_features_bare(data, labels, features=None,**kwargs):
+    def _extract_features_bare(data, labels, features=None, wildcards=None,**kwargs):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -435,6 +443,10 @@ class Snake():
         features.update({'label': lambda r: r.label})
 
         df = feature_table(data, labels, features)
+
+        if wildcards is not None:
+            for k,v in sorted(wildcards.items()):
+                df[k] = v
 
         return df
 
@@ -753,6 +765,46 @@ class Snake():
         nuclei_tracked = ops.timelapse.relabel_nuclei(nuclei, relabel)
 
         return nuclei_tracked
+
+    @staticmethod
+    def _trackmate_input(nuclei, shape=(2960,2960)):
+        from ops.annotate import annotate_points
+
+        # get nuclei coordinates
+        extract = Snake._extract_features_bare
+        features = {'i': lambda r: r.centroid[0],
+                    'j': lambda r: r.centroid[1]}
+        arr = []
+        for i, nuclei_frame in enumerate(nuclei):
+            arr += [extract(nuclei_frame, nuclei_frame, wildcards={'frame': i}, features=features)]
+
+        df_nuclei_coords = pd.concat(arr)
+
+        # generate annotation
+        nuclei_coords =  np.array([annotate_points(df_frame,'label',width=1,shape=shape) 
+            for _,df_frame 
+            in df_nuclei_coords.groupby('frame')])
+
+        return df_nuclei_coords, nuclei_coords
+
+    @staticmethod
+    def _relabel_trackmate(nuclei, df_trackmate, df_nuclei_coords):
+        import ops.timelapse
+
+        df_relabel = format_trackmate(df_trackmate,df_nuclei_coords)
+
+        # relabeled = np.zeros(nuclei.shape)
+
+        def relabel_frame(nuclei_frame,df_relabel_frame):
+            relabeled_frame = np.zeros(nuclei_frame.shape)
+            for _,cell in df_relabel_frame.iterrows():
+                relabeled[nuclei_frame==int(cell['cell'])]  = cell['relabel']
+            return relabeled_frame
+
+        relabeled  = np.array([relabel_frame(nuclei_frame,df_relabel_frame) 
+            for nuclei_frame, (_,df_relabel_frame) in zip(nuclei,df_relabel.groupby('frame'))])
+
+        return relabeled
 
     @staticmethod
     def _merge_triangle_hash(df_0,df_1,alignment):

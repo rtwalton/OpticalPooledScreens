@@ -8,15 +8,6 @@ from collections import Counter
 
 from scipy.interpolate import UnivariateSpline
 from statsmodels.stats.multitest import multipletests
-
-def call_TrackMate(input_path, output_path='trackmate_output.txt', fiji_path='/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx'):
-    import subprocess, os
-    
-    cmd = '''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py "input_path='{input_path}',output_path='{output_path}'"'''
-    cmd = cmd.format(fiji_path=fiji_path,ops_path=ops.__path__[0],input_path=input_path,output_path=output_path)
-    
-    output = subprocess.check_output(cmd, shell=True)
-    print(output.decode("utf-8"))
     
 def format_stats_wide(df_stats):
     index = ['gene_symbol']
@@ -115,7 +106,7 @@ def get_stats(df, col='spline_diff'):
     
     return stats
 
-# track nuclei
+# track nuclei nearest neighbor
 
 def initialize_graph(df):
     arr_df = [x for _, x in df.groupby('frame')]
@@ -202,6 +193,83 @@ def relabel_nuclei(nuclei, relabel):
 
     return nuclei_
 
+# track nuclei trackmate
+
+def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', 
+    fiji_path='/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx'):
+    # to do: guessing fiji path based on OS
+    import subprocess
+    
+    cmd = '''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py "input_path='{input_path}',output_path='{output_path}'"'''
+    cmd = cmd.format(fiji_path=fiji_path,ops_path=ops.__path__[0],input_path=input_path,output_path=output_path)
+    
+    output = subprocess.check_output(cmd, shell=True)
+    # print(output.decode("utf-8"))
+
+def format_trackmate(df_trackmate, df_nuclei_coords):
+    import ast
+
+    # include nuclei not in tracks
+    df = (df_nuclei_coords.merge(df_trackmate,how='left',on=['frame','cell'])
+            .fillna({'track_id':-1,
+                'parent_ids':'[]',
+                })
+           )
+
+    df[['parent_id_0','parent_id_1']] = (pd.DataFrame(df['parent_ids'].apply(lambda x: ast.literal_eval(x)).tolist(),
+                                                        index = df.index
+                                                       )
+                                           .fillna(value=-1)
+                                          )
+
+    df = df.drop(columns=['parent_ids']).set_index('id')
+
+    current = df.query('frame==0')['cell'].max()+1
+
+    df_tracked = df.query('track_id!=-1')
+
+    df_lookup = (df_tracked
+                 [['cell','parent_id_0','parent_id_1']]
+                 .append(pd.DataFrame({'cell':-1,'parent_id_0':-1,'parent_id_1':-1},
+                                      index=[-1]),ignore_index=False)
+                )
+    
+    arr_frames = []
+    for frame,df_frame in df_tracked.groupby('frame'):
+        
+        if frame==0:
+            arr_frames.append(df_frame.assign(relabel = lambda x: x['cell'],
+                                              parent_cell_0 = -1,
+                                              parent_cell_1 = -1))
+            continue
+        
+        arr_parents = []
+        for parents, df_parent in df_frame.groupby(['parent_id_0','parent_id_1']):
+                if (df_parent.pipe(len)==1) & ((np.array(parents)==-1).sum()==1):
+                    # unique child for a unique parent; set label same as parent
+                    df_parent = df_parent = df_parent.assign(relabel = df_lookup.loc[parents[0]]['cell'],
+                                                 parent_cell_0 = df_lookup.loc[parents[0]]['parent_id_0'],
+                                                 parent_cell_1 = df_lookup.loc[parents[1]]['parent_id_1'])
+                    df_lookup.loc[df_parent.index,:]=(df_parent[['relabel','parent_cell_0','parent_cell_1']].values
+                                                     )
+                else:
+                    # multiple children for a single parent, single child for multiple parents, or new; set as new labels
+                    num = df_parent.pipe(len)
+                    df_parent = df_parent.assign(relabel = list(range(current,current+num)),
+                                                 parent_cell_0 = df_lookup.loc[parents[0]]['cell'],
+                                                 parent_cell_1 = df_lookup.loc[parents[1]]['cell'])
+                    df_lookup.loc[df_parent.index,:]=(df_parent[['relabel','parent_cell_0','parent_cell_1']].values
+                                                     )
+                    current += num
+                arr_parents.append(df_parent)
+        arr_frames.append(pd.concat(arr_parents))
+
+    arr_frames.append(df.query('track_id == -1').assign(relabel = lambda x: list(range(current,current+x.pipe(len))),
+        parent_cell_0 = -1,
+        parent_cell_1 = -1)
+    )
+    
+    return pd.concat(arr_frames).reset_index().drop(columns='id')
 
 # plot traces
 

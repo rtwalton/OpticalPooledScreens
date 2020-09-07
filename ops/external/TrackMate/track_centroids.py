@@ -87,7 +87,7 @@ if not ok:
 
 ID_COLUMN = "id"
 TRACK_ID_COLUMN = "track_id"
-CELL_LABEL_COLUMN = "cell_label"
+CELL_LABEL_COLUMN = "cell"
 FEATURES = ["POSITION_X","POSITION_Y","FRAME"]
 
 trackIDs = model.getTrackModel().trackIDs(True)
@@ -123,9 +123,9 @@ for trackID in trackIDs:
             else:
                 parents.append(source.ID())
 
-        results.addValue("n_parents",str(len(parents)))
+        # results.addValue("n_parents",str(len(parents)))
         results.addValue("parent_ids",str(parents))
-        results.addValue("n_children",str(len(children)))
+        # results.addValue("n_children",str(len(children)))
         results.addValue("child_ids",str(children))
         
 results.save(output_path)
