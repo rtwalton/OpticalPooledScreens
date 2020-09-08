@@ -103,7 +103,6 @@ for trackID in trackIDs:
 
     for spot in sortedTrack:
         results.incrementCounter()
-        # results.addLabel(spot.getName()))
         results.addValue(ID_COLUMN, "" + str(spot.ID()))
         results.addValue(CELL_LABEL_COLUMN,str(int(spot.getFeature("MAX_INTENSITY"))))
         results.addValue(TRACK_ID_COLUMN, "" + str(trackID))
@@ -118,14 +117,9 @@ for trackID in trackIDs:
         children = []
         for edge in model.getTrackModel().edgesOf(spot):
             source,target = model.getTrackModel().getEdgeSource(edge), model.getTrackModel().getEdgeTarget(edge)
-            if source == spot:
-                children.append(target.ID())
-            else:
+            if source != spot:
                 parents.append(source.ID())
 
-        # results.addValue("n_parents",str(len(parents)))
         results.addValue("parent_ids",str(parents))
-        # results.addValue("n_children",str(len(children)))
-        results.addValue("child_ids",str(children))
         
 results.save(output_path)

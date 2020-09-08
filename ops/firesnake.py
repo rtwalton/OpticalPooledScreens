@@ -778,10 +778,10 @@ class Snake():
         for i, nuclei_frame in enumerate(nuclei):
             arr += [extract(nuclei_frame, nuclei_frame, wildcards={'frame': i}, features=features)]
 
-        df_nuclei_coords = pd.concat(arr)
+        df_nuclei_coords = pd.concat(arr).rename(columns={'label':'cell'})
 
         # generate annotation
-        nuclei_coords =  np.array([annotate_points(df_frame,'label',width=1,shape=shape) 
+        nuclei_coords =  np.array([annotate_points(df_frame,'cell',width=1,shape=shape) 
             for _,df_frame 
             in df_nuclei_coords.groupby('frame')])
 
@@ -791,14 +791,12 @@ class Snake():
     def _relabel_trackmate(nuclei, df_trackmate, df_nuclei_coords):
         import ops.timelapse
 
-        df_relabel = format_trackmate(df_trackmate,df_nuclei_coords)
-
-        # relabeled = np.zeros(nuclei.shape)
+        df_relabel = ops.timelapse.format_trackmate(df_trackmate,df_nuclei_coords)
 
         def relabel_frame(nuclei_frame,df_relabel_frame):
             relabeled_frame = np.zeros(nuclei_frame.shape)
             for _,cell in df_relabel_frame.iterrows():
-                relabeled[nuclei_frame==int(cell['cell'])]  = cell['relabel']
+                relabeled_frame[nuclei_frame==int(cell['cell'])]  = cell['relabel']
             return relabeled_frame
 
         relabeled  = np.array([relabel_frame(nuclei_frame,df_relabel_frame) 
