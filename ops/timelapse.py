@@ -195,16 +195,23 @@ def relabel_nuclei(nuclei, relabel):
 
 # track nuclei trackmate
 
-def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', 
-    fiji_path='/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx'):
-    # to do: guessing fiji path based on OS
+def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fiji_path=None):
     import subprocess
+
+    if fiji_path is None:
+        import sys
+        if sys.platform == "darwin":
+            fiji_path = '/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx'
+        elif sys.platform == "linux":
+            fiji_path = '~/Fiji.app/ImageJ-linux64'
+        else:
+            raise ValueError("Currently only OS X and linux systems can infer Fiji install location.")
+
     
     cmd = '''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py "input_path='{input_path}',output_path='{output_path}'"'''
     cmd = cmd.format(fiji_path=fiji_path,ops_path=ops.__path__[0],input_path=input_path,output_path=output_path)
     
     output = subprocess.check_output(cmd, shell=True)
-    # print(output.decode("utf-8"))
 
 def format_trackmate(df_trackmate, df_nuclei_coords):
     import ast
