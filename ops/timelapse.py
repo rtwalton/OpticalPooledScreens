@@ -195,8 +195,8 @@ def relabel_nuclei(nuclei, relabel):
 
 # track nuclei trackmate
 
-def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fiji_path=None):
-    import subprocess
+def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fiji_path=None, tracker_settings=dict()):
+    import subprocess, json
 
     if fiji_path is None:
         import sys
@@ -207,11 +207,20 @@ def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fij
         else:
             raise ValueError("Currently only OS X and linux systems can infer Fiji install location.")
 
+    tracker_defaults = {"LINKING_MAX_DISTANCE":50.,"GAP_CLOSING_MAX_DISTANCE":50.,
+                        "ALLOW_TRACK_SPLITTING":True,"SPLITTING_MAX_DISTANCE":100.,
+                        "ALLOW_TRACK_MERGING":True,"MERGING_MAX_DISTANCE":100.}
+
+    for key, val in tracker_defaults.items():
+        _ = tracker_settings.setdefault(key,val)
     
-    cmd = '''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py "input_path='{input_path}',output_path='{output_path}'"'''
-    cmd = cmd.format(fiji_path=fiji_path,ops_path=ops.__path__[0],input_path=input_path,output_path=output_path)
+    trackmate_call = ('''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py'''
+                        .format(fiji_path=fiji_path,ops_path=ops.__path__[0]))
+
+    variables = ('''"input_path='{input_path}',output_path='{output_path}',tracker_settings='{tracker_settings}'"'''
+                    .format(input_path=input_path,output_path=output_path,tracker_settings=json.dumps(tracker_settings)))
     
-    output = subprocess.check_output(cmd, shell=True)
+    output = subprocess.check_output(' '.join([trackmate_call,variables]), shell=True)
 
 def format_trackmate(df_trackmate, df_nuclei_coords):
     import ast

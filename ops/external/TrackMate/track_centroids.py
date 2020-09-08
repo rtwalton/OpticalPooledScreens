@@ -1,8 +1,10 @@
 #@String input_path
 #@String output_path
+#@String tracker_settings
 
 import sys
 import math
+import json
 
 from ij import IJ
 from ij.measure import ResultsTable
@@ -53,12 +55,14 @@ settings.detectorSettings = {
 # Configure tracker - We want to allow merges and fusions
 settings.trackerFactory = SparseLAPTrackerFactory()
 settings.trackerSettings = LAPUtils.getDefaultLAPSettingsMap()
-settings.trackerSettings['LINKING_MAX_DISTANCE'] = 50.
-settings.trackerSettings['GAP_CLOSING_MAX_DISTANCE'] = 50.
-settings.trackerSettings['ALLOW_TRACK_SPLITTING'] = True
-settings.trackerSettings['SPLITTING_MAX_DISTANCE'] = 100.
-settings.trackerSettings['ALLOW_TRACK_MERGING'] = True
-settings.trackerSettings['MERGING_MAX_DISTANCE'] = 100.
+
+# format for json conversion
+tracker_settings = tracker_settings.replace('{','{"').replace(':','":').replace(', ',', "')
+
+tracker_settings = json.loads(tracker_settings)
+
+for key,val in tracker_settings.items():
+    settings.trackerSettings[key] = val
 
 settings.addSpotAnalyzerFactory(SpotIntensityAnalyzerFactory())
    
