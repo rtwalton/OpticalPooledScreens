@@ -36,8 +36,8 @@ class Snake():
         return corrected
 
     @staticmethod
-    def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1,
-        align_within_cycle=True, cycle_files=None,keep_trailing=False, n=1):
+    def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1, q_norm=70,
+        align_within_cycle=True, cycle_files=None, keep_trailing=False, n=1, remove_for_cycle_alignment=None):
         """Rigid alignment of sequencing cycles and channels. 
 
         Expects `data` to be an array with dimensions (CYCLE, CHANNEL, I, J). 'n' 
@@ -46,41 +46,52 @@ class Snake():
         than one. Subpixel alignment is done if `upsample_factor` is greater than
         one (can be slow).
         """
-        if isinstance(data,list):
+        # print(data.shape)
+        if cycle_files is not None:
             arr = []
             # snakemake passes de-nested list of numpy arrays
             current = 0
             for cycle in cycle_files:
-                arr.append(np.array(data[current:current+cycle]))
+                if cycle == 1:
+                    arr.append(data[current])
+                else:
+                    arr.append(np.array(data[current:current+cycle]))
                 current += cycle
-            # for element in data:
-            #     if not isinstance(element,list):
-            #         arr.append(element)
-            #     elif len(element)==1:
-            #         arr.append(element[0])
-            #     else:
-            #         arr.append(np.array(element))
 
             data = np.array(arr)
         else:
             data = np.array(data)
 
-        if keep_trailing:
-            valid_channels = min([len(x) for x in data])
-            data = np.array([x[-valid_channels:] for x in data])
-
-        if data.ndim==1:
-            # data stacked with different cycle numbers?
-            # assume extra channels exist are on the first cycle, first channels
-            # does not return extra channels
-            extra = data[0].shape[1] - data[1].shape[0]
-            #stack channels in common
-            stacked = np.concatenate([data[0][:,extra:],np.array([data[cycle] for cycle in range(1,data.shape[0])])],axis=0)
-            #copy extra channels across other cycles
-            stacked = np.concatenate((np.array([data[0][0,:extra]]*len(cycle_files)),stacked),axis=1)
+        if keep_trailing != False | data.ndim==1:
+            channels = [len(x) for x in data]
+            stacked = np.array([x[-min(channels):] for x in data])
         else:
-            extra = 0
             stacked = data
+
+        if keep_trailing == 'propagate_extras':
+            extras = np.array(channels)-min(channels)
+            arr = []
+            for cycle,extra in enumerate(extras):
+                if extra != 0:
+                    arr.extend([data[cycle][extra_ch] for extra_ch in range(extra)])
+            propagate = np.array(arr)
+            stacked = np.concatenate((np.array([propagate]*stacked.shape[0]),stacked),axis=1)
+        else:
+            extras = [0,]*stacked.shape[0]
+
+        # if data.ndim==1:
+        #     # data stacked with different cycle numbers?
+        #     # assume extra channels exist are on the first cycle, first channels
+        #     # does not return extra channels
+        #     channels = [len(x) for x in data]
+        #     extra = max(channels) - min(channels)
+        #     #stack channels in common
+        #     stacked = np.array([data[0][extra:]]+[data[cycle] for cycle in range(1,data.shape[0])])
+        #     #copy extra channels across other cycles
+        #     stacked = np.concatenate((np.array([data[0][:extra]]*stacked.shape[0]),stacked),axis=1)
+        # else:
+        #     extra = 0
+        #     stacked = data
 
         assert stacked.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
 
@@ -88,12 +99,6 @@ class Snake():
         aligned = stacked.copy()
         if align_within_cycle:
             align_it = lambda x: Align.align_within_cycle(x, window=window, upsample_factor=upsample_factor)
-            # if data.shape[1] == 4:
-            #     n = 0
-            #     align_it = lambda x: Align.align_within_cycle(x, window=window, 
-            #         upsample_factor=upsample_factor, cutoff=cutoff)
-            # else:
-            #     n = 1
             
             aligned[:, n:] = np.array([align_it(x) for x in aligned[:, n:]])
             
@@ -104,13 +109,22 @@ class Snake():
                                 window=window, upsample_factor=upsample_factor)
         elif method == 'SBS_mean':
             # calculate cycle offsets using the average of SBS channels
-            target = Align.apply_window(aligned[:, n:], window=window).max(axis=1)
-            normed = Align.normalize_by_percentile(target)
+            sbs_channels = list(range(n,aligned.shape[1]))
+            if remove_for_cycle_alignment != None:
+                sbs_channels.remove(remove_for_cycle_alignment)
+
+            target = Align.apply_window(aligned[:, sbs_channels], window=window).max(axis=1)
+            normed = Align.normalize_by_percentile(target, q_norm=q_norm)
             normed[normed > cutoff] = cutoff
             offsets = Align.calculate_offsets(normed, upsample_factor=upsample_factor)
             # apply cycle offsets to each channel
-            for channel in range(extra,aligned.shape[1]):
-                aligned[:, channel] = Align.apply_offsets(aligned[:, channel], offsets)
+            for channel in range(aligned.shape[1]):
+                if channel >= sum(extras):
+                    aligned[:, channel] = Align.apply_offsets(aligned[:, channel], offsets)
+                else:
+                    # don't apply offsets to extra channel in the cycle it was acquired
+                    offset_cycles = list(range(aligned.shape[0])).remove(list(np.cumsum(extras)>channel).index(True))
+                    aligned[offset_cycles, channel] = Align.apply_offsets(aligned[offset_cycles, channel], offsets)
 
         return aligned
 
@@ -164,7 +178,7 @@ class Snake():
         return np.stack(arr,axis=-3)
         
     @staticmethod
-    def _segment_nuclei(data, threshold, area_min, area_max,smooth=1.35,radius=15):
+    def _segment_nuclei(data, threshold, area_min, area_max, smooth=1.35, radius=15):
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape (CHANNEL, I, J).
         """
@@ -208,7 +222,7 @@ class Snake():
         return nuclei.astype(np.uint16)
 
     @staticmethod
-    def _segment_cells(data, nuclei, threshold):
+    def _segment_cells(data, nuclei, threshold, add_nuclei=True):
         """Segment cells from aligned data. Matches cell labels to nuclei labels.
         Note that labels can be skipped, for example if cells are touching the 
         image boundary.
@@ -226,7 +240,8 @@ class Snake():
         mask = mask > threshold
         # at least get nuclei shape in cells image -- helpful for mapping reads to cells
         # at edge of FOV
-        mask += nuclei.astype(bool)
+        if add_nuclei:
+            mask += nuclei.astype(bool)
         try:
             # skimage precision warning
             with warnings.catch_warnings():
