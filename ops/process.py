@@ -112,7 +112,7 @@ def find_peaks(data, n=5):
     
     return peaks
 
-def calculate_illumination_correction(files, smooth=None, rescale=True, threading=False):
+def calculate_illumination_correction(files, smooth=None, rescale=True, threading=False, slicer=slice(None)):
     """calculate illumination correction field for use with apply_illumination_correction 
     Snake method. Equivalent to CellProfiler's CorrectIlluminationCalculate module with 
     option "Regular", "All", "Median Filter"
@@ -125,11 +125,11 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
 
     global data
 
-    data = read(files[0])/N
+    data = read(files[0])[slicer]/N
 
     def accumulate_image(file):
         global data
-        data += read(file)/N
+        data += read(file)[slicer]/N
 
     if threading:
         from joblib import Parallel, delayed
@@ -138,7 +138,7 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
         for file in files[1:]:
             accumulate_image(file)
 
-    data = data.astype(np.uint16)
+    data = np.squeeze(data.astype(np.uint16))
 
     if not smooth:
         # default is 1/20th area of image
