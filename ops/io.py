@@ -169,40 +169,6 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Fa
     metadata_filename = ops.filenames.name_file(description,subdir='metadata',tag='metadata',ext='pkl')
     pd.DataFrame(well_metadata).to_pickle(metadata_filename)
 
-def single_nd2_to_tif(file,mag='10X',zproject=False):
-    nd2_file_pattern = [
-                (r'(?P<cycle>c[0-9]+)?/?'
-                '(?P<dataset>.*)?/?'
-                'Well(?P<well>[A-H][0-9]*)_'
-                '(Point[A-H][0-9]*_(?P<site>[0-9]*)_)?'
-                'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_4>[^_,]+)(_[^,]*)?)?,?'
-                '((?P<channel_5>[^_,]+)(_[^_]*)?)?'
-                '_Seq([0-9]+).nd2')
-               ]
-
-    description = ops.filenames.parse_filename(file,custom_patterns=nd2_file_pattern)
-    description['ext']='tif'
-    description['mag']=mag
-    try:
-        description['subdir']='preprocess/'+description['cycle']
-    except:
-        description['subdir']='preprocess'
-    description['dataset']=None
-
-
-    with ND2Reader(file) as image:
-        image.iter_axes = 'c'
-        image.bundle_axes = 'zxy'
-        filename = ops.filenames.name_file(description)
-        if zproject:
-            output=np.array([np.max(im,axis=0) for im in image])
-        else:
-            output=np.array([im for im in image])
-        save_stack(filename,output)
-
 def tile_config(df,output_filename):
     """Generate tile configuration file from site position dataframe for use with FIJI grid collection stitching
     """

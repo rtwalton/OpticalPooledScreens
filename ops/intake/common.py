@@ -2,8 +2,13 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.kdtree import KDTree
 from scipy.stats import mode
-from pims import ND2_Reader
 from itertools import product
+from ops.filenames import name_file as name
+from ops.filenames import parse_filename as parse
+from ops.io import save_stack as save
+
+from pims import ND2_Reader
+from nd2reader import ND2Reader
 
 from ops.constants import *
 
@@ -22,6 +27,18 @@ ND2_EXPORT_FILE_PATTERN_96 = ('.*'
         r'(?:(?P<cycle>[^_\.]*)_)?.*'
         r'(?P<m>\d{4})'                   
         r'(?:\.(?P<tag>.*))*\.(?P<ext>.*)')
+
+ND2_FILE_PATTERN_LF = [(r'(?P<cycle>c[0-9]+)?/?'
+    r'(?P<dataset>.*)?/?'
+    r'Well(?P<well>[A-H][0-9]*)_'
+    r'(Point[A-H][0-9]+_(?P<site>[0-9]*)_)?'
+    r'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
+    r'((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
+    r'((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
+    r'((?P<channel_4>[^_,]+)(_[^,]*)?)?,?'
+    r'((?P<channel_5>[^_,]+)(_[^,]*)?)?,?'
+    r'((?P<channel_6>[^_,]+)(_[^_]*)?)?'
+    r'_Seq([0-9]+).(?P<ext>.*)')]
 
 def add_neighbors(df_info, num_neighbors=9, radius_leniency=10):
     xy = ['x_um', 'y_um']
@@ -46,6 +63,46 @@ def add_neighbors(df_info, num_neighbors=9, radius_leniency=10):
 
     return df_info.merge(pd.DataFrame(arr), how='left')
 
+def parse_nd2_filename(f):
+    description = parse(f,custom_patterns=ND2_FILE_PATTERN_LF)
+
+    if 'site' in description.keys():
+        description['site']=int(description['site'])
+
+    return description
+
+## ND2Reader (pure python)
+# initial tests show this is faster at metadata extraction, slower at image reading
+
+def extract_nd2_metadata_py(f,variables=['frames','x_data','y_data','z_data','t_data'],f_description=None):
+    if f_description is None:
+        f_description = parse_nd2_filename(f)
+
+    with ND2Reader(f) as nd2:
+        df = pd.DataFrame({key:val for key,val in nd2.metadata.items() if key in variables})
+        if 'z_data' in variables:
+            df = pd.concat([df,
+                            pd.DataFrame(np.array(df['z_data'].tolist()),
+                                         columns=['z_'+str(level) for level in nd2.metadata['z_levels']])
+                           ],axis=1) 
+            df = df.drop(columns='z_data')
+        if 't_data' in variables:
+            t_data = np.array(nd2.timesteps).reshape(-1,len(nd2.metadata['z_levels']))
+            df = pd.concat([df,
+                            pd.DataFrame(t_data,columns=['t_'+str(step) for step in range(t_data.shape[1])])
+                           ],axis=1)
+        if 'v' in nd2.axes:
+            df['site'] = nd2.metadata['fields_of_view']
+        else:
+            df = df.assign(site = f_description['site'])
+            
+    (df
+     .assign(well = f_description['well'])
+     .to_pickle(name(f_description,ext='pkl'))
+    )
+
+## pims_nd2 (Nikon SDK based)
+# initial tests show this is slower at metadata extraction, faster at image reading
 
 def get_metadata_at_coords(nd2, **coords):
     import pims_nd2
@@ -68,7 +125,7 @@ def get_metadata_at_coords(nd2, **coords):
                     't_ms': nd2._buf_md.dTimeMSec,
                 }    
 
-def extract_nd2_metadata(f, interpolate=True, progress=None):
+def extract_nd2_metadata_sdk(f, interpolate=True, progress=None):
     """Interpolation fills in timestamps linearly for each well; x,y,z positions 
     are copied from the first time point. 
     """
@@ -120,7 +177,7 @@ def build_file_table(f_nd2, f_template, wells):
     rename = lambda x: name(parse(f_template), **x)
 
     get_well = lambda x: wells[int(re.findall('Well(\d)', x)[0]) - 1]
-    df_files = (common.extract_nd2_metadata(f_nd2, progress=tqdn)
+    df_files = (common.extract_nd2_metadata_sdk(f_nd2, progress=tqdn)
      .assign(well=lambda x: x['file'].apply(get_well))
      .assign(site=lambda x: x['m'])
      .assign(file_=lambda x: x.apply(rename, axis=1))
@@ -128,7 +185,7 @@ def build_file_table(f_nd2, f_template, wells):
     
     return df_files
 
-def export_nd2(f_nd2, df_files):
+def export_nd2_sdk_file_table(f_nd2, df_files):
 
     df = df_files.drop_duplicates('file_')
 
@@ -140,3 +197,44 @@ def export_nd2(f_nd2, df_files):
         for m, data in tqdn(enumerate(nd2)):
             f_out = df.query('m == @m')['file_'].iloc[0]
             save(f_out, data)
+
+## user-defined nd2 reader backend
+
+def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_description=None, split=False, backend='ND2SDK',**kwargs):
+    if f_description is None:
+        f_description = parse_nd2_filename(f)
+
+    if backend == 'ND2SDK':
+        reader = ND2_Reader
+        axes = list('mtzcyx')
+    elif backend == 'python':
+        reader = ND2Reader
+        axes = list('vtzcyx')
+    else:
+        raise ValueError('Only "ND2SDK" and "python" backends are available.')
+
+    with reader(f) as nd2:
+        nd2.iter_axes = iter_axes
+        nd2.bundle_axes = [ax for ax in axes if (ax in nd2.axes) & (ax != iter_axes)]
+        if project_axes:
+            g = lambda x: x.max(axis=nd2.bundle_axes.index(project_axes))
+            axes.remove(project_axes)
+        else:
+            g = lambda x: x
+
+        if split:
+            axes.remove(nd2.iter_axes[0])
+            axes = [ax in nd2.bundle_axes for ax in axes]
+            axes = axes[axes.index(True):]
+            for site,data in enumerate(nd2[slicer]):
+                data = g(data)
+                save(name(f_description,site=site, ext='tif'),
+                    data[tuple([slice(None) if ax else None for ax in axes])], 
+                    **kwargs)
+        else:
+            axes = [ax in nd2.axes for ax in axes]
+            axes = axes[axes.index(True):]
+            data = np.array([g(data) for data in nd2[slicer]])
+            save(name(f_description, ext='tif'),
+                data[tuple([slice(None) if ax else None for ax in axes])], 
+                **kwargs)
