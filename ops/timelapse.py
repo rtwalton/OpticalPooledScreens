@@ -195,7 +195,15 @@ def relabel_nuclei(nuclei, relabel):
 
 # track nuclei trackmate
 
-def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fiji_path=None, tracker_settings=dict()):
+def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fiji_path=None, threads=1, tracker_settings=dict()):
+    '''warnings:    - `threads` is probably not actually setting the max threads for fiji. 
+
+                    - to allow multiple instances of fiji to run concurrently (e.g., launched from snakemake pipeline), likely have 
+                    to set `allowMultiple` parameter in Fiji.app/Contents/Info.plist to true.
+
+    `CUTOFF_PERCENTILE` parameter in tracker_settings changes the alternative cost to gap closing/merging/splitting. Higher values -> 
+    more gap closures/merges/splits.
+    '''
     import subprocess, json
 
     if fiji_path is None:
@@ -207,9 +215,11 @@ def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fij
         else:
             raise ValueError("Currently only OS X and linux systems can infer Fiji install location.")
 
-    tracker_defaults = {"LINKING_MAX_DISTANCE":50.,"GAP_CLOSING_MAX_DISTANCE":50.,
-                        "ALLOW_TRACK_SPLITTING":True,"SPLITTING_MAX_DISTANCE":100.,
-                        "ALLOW_TRACK_MERGING":True,"MERGING_MAX_DISTANCE":100.}
+    tracker_defaults = {"LINKING_MAX_DISTANCE":60.,"GAP_CLOSING_MAX_DISTANCE":60.,
+                        "ALLOW_TRACK_SPLITTING":True,"SPLITTING_MAX_DISTANCE":60.,
+                        "ALLOW_TRACK_MERGING":True,"MERGING_MAX_DISTANCE":60.,
+                        "MAX_FRAME_GAP":2,"CUTOFF_PERCENTILE":0.90}
+
 
     for key, val in tracker_defaults.items():
         _ = tracker_settings.setdefault(key,val)
@@ -217,10 +227,12 @@ def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fij
     trackmate_call = ('''{fiji_path} --ij2 --headless --console --run {ops_path}/external/TrackMate/track_centroids.py'''
                         .format(fiji_path=fiji_path,ops_path=ops.__path__[0]))
 
-    variables = ('''"input_path='{input_path}',output_path='{output_path}',tracker_settings='{tracker_settings}'"'''
-                    .format(input_path=input_path,output_path=output_path,tracker_settings=json.dumps(tracker_settings)))
+    variables = ('''"input_path='{input_path}',output_path='{output_path}',threads={threads},tracker_settings='{tracker_settings}'"'''
+                    .format(input_path=input_path,output_path=output_path,
+                        threads=int(threads),tracker_settings=json.dumps(tracker_settings)))
     
     output = subprocess.check_output(' '.join([trackmate_call,variables]), shell=True)
+    print(output.decode("utf-8"))
 
 def format_trackmate(df_trackmate, df_nuclei_coords):
     import ast

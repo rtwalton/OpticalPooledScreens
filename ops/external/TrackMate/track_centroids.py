@@ -1,10 +1,13 @@
-#@String input_path
-#@String output_path
-#@String tracker_settings
+#@ String input_path
+#@ String output_path
+#@ int threads
+#@ String tracker_settings
 
 import sys
 import math
 import json
+
+from java.io import BufferedReader, FileReader
 
 from ij import IJ
 from ij.measure import ResultsTable
@@ -14,13 +17,12 @@ from fiji.plugin.trackmate import Settings
 from fiji.plugin.trackmate import TrackMate
 from fiji.plugin.trackmate import FeatureModel
 from fiji.plugin.trackmate import Logger
-from fiji.plugin.trackmate.detection import LogDetectorFactory
+from fiji.plugin.trackmate.detection import ManualDetectorFactory
 from fiji.plugin.trackmate.tracking.sparselap import SparseLAPTrackerFactory
 from fiji.plugin.trackmate.tracking import LAPUtils
 from fiji.plugin.trackmate.features.spot import SpotIntensityAnalyzerFactory
-
-# read in image
-image = IJ.openImage(input_path)  
+from fiji.plugin.trackmate import Spot
+from fiji.plugin.trackmate import SpotCollection
    
 #----------------------------
 # Create the model object now
@@ -40,17 +42,28 @@ model.setLogger(Logger.IJ_LOGGER)
 #------------------------
       
 settings = Settings()
-settings.setFrom(image)
-      
-# Configure detector - We use the Strings for the keys
-settings.detectorFactory = LogDetectorFactory()
-settings.detectorSettings = { 
-    'DO_SUBPIXEL_LOCALIZATION' : True,
-    'RADIUS' : 0.5,
-    'TARGET_CHANNEL' : 1,
-    'THRESHOLD' : 1.,
-    'DO_MEDIAN_FILTERING' : False,
-}  
+
+## read in csv
+csvReader = BufferedReader(FileReader(input_path))
+header = csvReader.readLine().split(",")
+row = csvReader.readLine()
+
+spots = SpotCollection()
+
+while row is not None:
+    data = {col:val for col,val in zip(header,row.split(","))}
+    spot = Spot(float(data['j']), float(data['i']), 0, math.sqrt( float(data['area']) / math.pi ), 1, data['cell'])
+    spots.add(spot, int(data['frame']))
+    row = csvReader.readLine()
+
+csvReader.close()
+
+model.setSpots(spots,False)
+
+# Set up dummy detector
+settings.detectorFactory = ManualDetectorFactory()
+settings.detectorSettings = {}
+settings.detectorSettings[ 'RADIUS' ] = 1.
     
 # Configure tracker - We want to allow merges and fusions
 settings.trackerFactory = SparseLAPTrackerFactory()
@@ -58,7 +71,6 @@ settings.trackerSettings = LAPUtils.getDefaultLAPSettingsMap()
 
 # format for json conversion
 tracker_settings = tracker_settings.replace('{','{"').replace(':','":').replace(', ',', "')
-
 tracker_settings = json.loads(tracker_settings)
 
 for key,val in tracker_settings.items():
@@ -71,20 +83,16 @@ settings.addSpotAnalyzerFactory(SpotIntensityAnalyzerFactory())
 #-------------------
    
 trackmate = TrackMate(model, settings)
+trackmate.setNumThreads(threads)
       
 #--------
 # Process
 #--------
    
-ok = trackmate.checkInput()
-if not ok:
-    sys.exit(str(trackmate.getErrorMessage()))
-   
 ok = trackmate.process()
 if not ok:
     sys.exit(str(trackmate.getErrorMessage()))
-   
-      
+
 #----------------
 # Save results
 #----------------
@@ -108,7 +116,8 @@ for trackID in trackIDs:
     for spot in sortedTrack:
         results.incrementCounter()
         results.addValue(ID_COLUMN, "" + str(spot.ID()))
-        results.addValue(CELL_LABEL_COLUMN,str(int(spot.getFeature("MAX_INTENSITY"))))
+        # results.addValue(CELL_LABEL_COLUMN,str(int(spot.getFeature("MAX_INTENSITY"))))
+        results.addValue(CELL_LABEL_COLUMN, spot.getName())
         results.addValue(TRACK_ID_COLUMN, "" + str(trackID))
         for feature in FEATURES:
             val = spot.getFeature(feature)
@@ -125,5 +134,4 @@ for trackID in trackIDs:
                 parents.append(source.ID())
 
         results.addValue("parent_ids",str(parents))
-        
 results.save(output_path)
