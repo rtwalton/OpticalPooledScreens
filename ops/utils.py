@@ -483,6 +483,30 @@ def applyIJ(f, arr, *args, **kwargs):
     output_shape = arr.shape[:-2] + arr_[0].shape
     return np.array(arr_).reshape(output_shape)
 
+def applyIJ_parallel(f, arr, backend='threading',*args, **kwargs):
+    """Apply a function that expects 2D input to the trailing two
+    dimensions of an array, parallelizing computation across 2D frames. 
+    The function must output an array whose shape depends only on the 
+    input shape. 
+    """
+    from joblib import Parallel,delayed
+
+    h, w = arr.shape[-2:]
+    reshaped = arr.reshape((-1, h, w))
+
+    tqdm = kwargs.pop('tqdm')
+    n_jobs = kwargs.pop('n_jobs')
+
+    if tqdm:
+        from tqdm import tqdm_notebook as tqdn
+        work = tqdn(reshaped,'frame')
+    else:
+        work = reshaped
+
+    arr_ = Parallel(n_jobs=n_jobs,backend=backend)(delayed(f)(frame, *args, **kwargs) for frame in work)
+
+    output_shape = arr.shape[:-2] + arr_[0].shape
+    return np.array(arr_).reshape(output_shape)
 
 def inscribe(mask):
     """Guess the largest axis-aligned rectangle inside mask. 

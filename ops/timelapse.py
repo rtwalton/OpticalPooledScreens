@@ -254,16 +254,16 @@ def format_trackmate(df_trackmate, df_nuclei_coords):
 
     current = df.query('frame==0')['cell'].max()+1
 
-    df_tracked = df.query('track_id!=-1')
+    # df_tracked = df.query('track_id!=-1')
 
-    df_lookup = (df_tracked
+    df_lookup = (df.query('track_id!=-1')
                  [['cell','parent_id_0','parent_id_1']]
                  .append(pd.DataFrame({'cell':-1,'parent_id_0':-1,'parent_id_1':-1},
                                       index=[-1]),ignore_index=False)
                 )
     
     arr_frames = []
-    for frame,df_frame in df_tracked.groupby('frame'):
+    for frame,df_frame in df.query('track_id!=-1').groupby('frame'):
         
         if frame==0:
             arr_frames.append(df_frame.assign(relabel = lambda x: x['cell'],
@@ -275,20 +275,25 @@ def format_trackmate(df_trackmate, df_nuclei_coords):
         for parents, df_parent in df_frame.groupby(['parent_id_0','parent_id_1']):
                 if (df_parent.pipe(len)==1) & ((np.array(parents)==-1).sum()==1):
                     # unique child for a unique parent; set label same as parent
-                    df_parent = df_parent = df_parent.assign(relabel = df_lookup.loc[parents[0]]['cell'],
+                    df_parent = df_parent.assign(relabel = df_lookup.loc[parents[0]]['cell'],
+                                                # propagate parents from parent
                                                  parent_cell_0 = df_lookup.loc[parents[0]]['parent_id_0'],
                                                  parent_cell_1 = df_lookup.loc[parents[1]]['parent_id_1'])
+                    # set lookup parent ids as parent cells
                     df_lookup.loc[df_parent.index,:]=(df_parent[['relabel','parent_cell_0','parent_cell_1']].values
                                                      )
                 else:
                     # multiple children for a single parent, single child for multiple parents, or new; set as new labels
                     num = df_parent.pipe(len)
                     df_parent = df_parent.assign(relabel = list(range(current,current+num)),
+                                                # set parents from each parent cell label 
                                                  parent_cell_0 = df_lookup.loc[parents[0]]['cell'],
                                                  parent_cell_1 = df_lookup.loc[parents[1]]['cell'])
+                    # set lookup parent ids as parent cells
                     df_lookup.loc[df_parent.index,:]=(df_parent[['relabel','parent_cell_0','parent_cell_1']].values
                                                      )
                     current += num
+
                 arr_parents.append(df_parent)
         arr_frames.append(pd.concat(arr_parents))
 
@@ -297,7 +302,10 @@ def format_trackmate(df_trackmate, df_nuclei_coords):
         parent_cell_1 = -1)
     )
     
-    return pd.concat(arr_frames).reset_index().drop(columns='id')
+    return (pd.concat(arr_frames)
+        .reset_index()
+        .drop(columns=['id','parent_id_0','parent_id_1','position_x','position_y'])
+        )
 
 # plot traces
 
