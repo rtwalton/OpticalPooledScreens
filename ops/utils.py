@@ -483,7 +483,7 @@ def applyIJ(f, arr, *args, **kwargs):
     output_shape = arr.shape[:-2] + arr_[0].shape
     return np.array(arr_).reshape(output_shape)
 
-def applyIJ_parallel(f, arr, backend='threading',*args, **kwargs):
+def applyIJ_parallel(f, arr, n_jobs=-2, backend='threading',tqdm=False, *args, **kwargs):
     """Apply a function that expects 2D input to the trailing two
     dimensions of an array, parallelizing computation across 2D frames. 
     The function must output an array whose shape depends only on the 
@@ -493,9 +493,6 @@ def applyIJ_parallel(f, arr, backend='threading',*args, **kwargs):
 
     h, w = arr.shape[-2:]
     reshaped = arr.reshape((-1, h, w))
-
-    tqdm = kwargs.pop('tqdm')
-    n_jobs = kwargs.pop('n_jobs')
 
     if tqdm:
         from tqdm import tqdm_notebook as tqdn

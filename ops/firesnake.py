@@ -30,10 +30,16 @@ class Snake():
     """
 
     @staticmethod
-    def _apply_illumination_correction(data, correction):
-        corrected = (data/correction).astype(np.uint16)
-
-        return corrected
+    def _apply_illumination_correction(data, correction, n_jobs=1, backend='threading'):
+        if n_jobs == 1:
+            return (data/correction).astype(np.uint16)
+        else:
+            return ops.utils.applyIJ_parallel(Snake._apply_illumination_correction,
+                arr=data,
+                correction=correction,
+                backend=backend,
+                n_jobs=n_jobs
+                )
 
     @staticmethod
     def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1, q_norm=70,
