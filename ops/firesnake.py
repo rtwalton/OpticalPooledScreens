@@ -802,18 +802,40 @@ class Snake():
     def _relabel_trackmate(nuclei, df_trackmate, df_nuclei_coords):
         import ops.timelapse
 
-        df_relabel = ops.timelapse.format_trackmate(df_trackmate,df_nuclei_coords)
+        # include nuclei not in tracks
+        df = (df_nuclei_coords
+                .merge(df_trackmate[['id','track_id','cell','frame','parent_ids']],how='left',on=['frame','cell'])
+                .fillna({'track_id':-1,
+                    'parent_ids':'[]',
+                    })
+               )
+
+        # give un-tracked cells a unique id
+        missing = sorted(set(range(int(df['id'].max())))-set(df['id']))
+        df.loc[df['id'].isna(),'id'] = missing
+
+        # set relabeling values
+        df_relabel = ops.timelapse.format_trackmate(df[['id','cell','frame','parent_ids']])
+
+        df_relabel = (df
+            .merge(df_relabel[['id','relabel']],how='left',on='id')
+            .drop(columns=['id','parent_ids'])
+            )
 
         def relabel_frame(nuclei_frame,df_relabel_frame):
-            relabeled_frame = np.zeros(nuclei_frame.shape, dtype=np.uint16)
-            for _,cell in df_relabel_frame.iterrows():
-                relabeled_frame[nuclei_frame==int(cell['cell'])]  = int(cell['relabel'])
-            return relabeled_frame
+            nuclei_frame_ = nuclei_frame.copy()
+            max_label = nuclei_frame.max() + 1
+            labels = df_relabel_frame['cell'].tolist()
+            relabels = df_relabel_frame['relabel'].tolist()
+            table = np.zeros(nuclei_frame.max()+1)
+            table[labels] = relabels
+            nuclei_frame_ = table[nuclei_frame_]
+            return nuclei_frame_
 
         relabeled  = np.array([relabel_frame(nuclei_frame,df_relabel_frame) 
             for nuclei_frame, (_,df_relabel_frame) in zip(nuclei,df_relabel.groupby('frame'))])
 
-        return df_relabel.drop(columns=['cell']).rename(columns={'relabel':'cell'}),relabeled
+        return (df_relabel.drop(columns=['cell']).rename(columns={'relabel':'cell'}), relabeled.astype(np.uint16))
 
     @staticmethod
     def _merge_triangle_hash(df_0,df_1,alignment):

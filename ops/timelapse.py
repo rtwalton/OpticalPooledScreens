@@ -234,78 +234,66 @@ def call_TrackMate_centroids(input_path, output_path='trackmate_output.csv', fij
     output = subprocess.check_output(' '.join([trackmate_call,variables]), shell=True)
     print(output.decode("utf-8"))
 
-def format_trackmate(df_trackmate, df_nuclei_coords):
+def format_trackmate(df):
     import ast
 
-    # include nuclei not in tracks
-    df = (df_nuclei_coords.merge(df_trackmate,how='left',on=['frame','cell'])
-            .fillna({'track_id':-1,
-                'parent_ids':'[]',
-                })
-           )
+    df = (pd.concat([df,
+        pd.DataFrame(df['parent_ids'].apply(lambda x: ast.literal_eval(x)).tolist(),
+            index = df.index,columns=['parent_id_0','parent_id_1'])
+        ],axis=1)
+        .fillna(value=-1)
+        .drop(columns=['parent_ids'])
+        .assign(relabel=-1,parent_cell_0=-1,parent_cell_1=-1)
+        .astype(int)
+        .set_index('id')
+    )
 
-    df[['parent_id_0','parent_id_1']] = (pd.DataFrame(df['parent_ids'].apply(lambda x: ast.literal_eval(x)).tolist(),
-                                                        index = df.index
-                                                       )
-                                           .fillna(value=-1)
-                                          )
+    lookup = np.zeros((df.index.max()+2,3),dtype=int)
 
-    df = df.drop(columns=['parent_ids']).set_index('id')
+    lookup[df.index] = (df
+        [['cell','parent_id_0','parent_id_1']]
+        .values
+        )
 
-    current = df.query('frame==0')['cell'].max()+1
+    lookup[-1] = np.array([-1,-1,-1])
 
-    # df_tracked = df.query('track_id!=-1')
+    set_cols = ['relabel','parent_cell_0','parent_cell_1']
 
-    df_lookup = (df.query('track_id!=-1')
-                 [['cell','parent_id_0','parent_id_1']]
-                 .append(pd.DataFrame({'cell':-1,'parent_id_0':-1,'parent_id_1':-1},
-                                      index=[-1]),ignore_index=False)
-                )
+    current = 1
     
     arr_frames = []
-    for frame,df_frame in df.query('track_id!=-1').groupby('frame'):
+    for frame,df_frame in df.groupby('frame'):
+        df_frame = df_frame.copy()
         
         if frame==0:
-            arr_frames.append(df_frame.assign(relabel = lambda x: x['cell'],
+            arr_frames.append(df_frame.assign(relabel = list(range(current,current+df_frame.pipe(len))),
                                               parent_cell_0 = -1,
                                               parent_cell_1 = -1))
+            current += df_frame.pipe(len)
             continue
-        
-        arr_parents = []
-        for parents, df_parent in df_frame.groupby(['parent_id_0','parent_id_1']):
-                if (df_parent.pipe(len)==1) & ((np.array(parents)==-1).sum()==1):
-                    # unique child for a unique parent; set label same as parent
-                    df_parent = df_parent.assign(relabel = df_lookup.loc[parents[0]]['cell'],
-                                                # propagate parents from parent
-                                                 parent_cell_0 = df_lookup.loc[parents[0]]['parent_id_0'],
-                                                 parent_cell_1 = df_lookup.loc[parents[1]]['parent_id_1'])
-                    # set lookup parent ids as parent cells
-                    df_lookup.loc[df_parent.index,:]=(df_parent[['relabel','parent_cell_0','parent_cell_1']].values
-                                                     )
-                else:
-                    # multiple children for a single parent, single child for multiple parents, or new; set as new labels
-                    num = df_parent.pipe(len)
-                    df_parent = df_parent.assign(relabel = list(range(current,current+num)),
-                                                # set parents from each parent cell label 
-                                                 parent_cell_0 = df_lookup.loc[parents[0]]['cell'],
-                                                 parent_cell_1 = df_lookup.loc[parents[1]]['cell'])
-                    # set lookup parent ids as parent cells
-                    df_lookup.loc[df_parent.index,:]=(df_parent[['relabel','parent_cell_0','parent_cell_1']].values
-                                                     )
-                    current += num
 
-                arr_parents.append(df_parent)
-        arr_frames.append(pd.concat(arr_parents))
+        # unique child from single parent
+        idx_propagate = ((df_frame.duplicated(['parent_id_0','parent_id_1'],keep=False)==False)
+                &
+              ((df_frame[['parent_id_0','parent_id_1']]==-1).sum(axis=1)==1)
+             ).values
 
-    arr_frames.append(df.query('track_id == -1').assign(relabel = lambda x: list(range(current,current+x.pipe(len))),
-        parent_cell_0 = -1,
-        parent_cell_1 = -1)
-    )
+        lookup[df_frame[idx_propagate].index.values] = df_frame.loc[idx_propagate,set_cols] = lookup[df_frame.loc[idx_propagate,'parent_id_0'].values]
+
+        # split, merge, or new
+        idx_new = ((df_frame.duplicated(['parent_id_0','parent_id_1'],keep=False))
+                |
+              ((df_frame[['parent_id_0','parent_id_1']]==-1).sum(axis=1)!=1)
+             ).values
+
+        lookup[df_frame[idx_new].index.values] = df_frame.loc[idx_new,set_cols] = np.array([list(range(current,current+idx_new.sum())),
+                                                                                            lookup[df_frame.loc[idx_new,'parent_id_0'].values,0],
+                                                                                            lookup[df_frame.loc[idx_new,'parent_id_1'].values,0]
+                                                                                            ]).T
+        current += idx_new.sum()
+        arr_frames.append(df_frame)
     
-    return (pd.concat(arr_frames)
-        .reset_index()
-        .drop(columns=['id','parent_id_0','parent_id_1','position_x','position_y'])
-        )
+    return pd.concat(arr_frames).reset_index()
 
 # plot traces
 
