@@ -5,17 +5,22 @@ import ops.filenames
 from nd2reader import ND2Reader
 import pandas as pd
 
-def save_hdf_image(filename,image,pixel_size_um=1,image_metadata=None,array_name='image'):
-	# mkdir if doesn't exist
-	hdf_file = open_file(filename,mode='w')
-	try:
-		hdf_file.create_array('/',array_name,image)
-		image_node = hdf_file.get_node('/',name=array_name)
-		image_node.attrs.element_size_um = np.array([(pixel_size_um,)]*3).astype(np.float32)
-		image_node.attrs.image_metadata = image_metadata
-	except:
-		print('error in saving image array to hdf file')
-	hdf_file.close()
+def save_hdf_image(filename,image,pixel_size_um=1,image_metadata=None,
+    array_name='image',chunkshape=-1):
+    # mkdir if doesn't exist
+    hdf_file = open_file(filename,mode='w')
+    try:
+        if chunkshape==-1:
+            hdf_file.create_array('/',array_name,image)
+        else:
+            # chunking gives no apparent performance advantage for this use-case of reading/writing arrays
+            hdf_file.create_carray('/',array_name,obj=image,chunkshape=chunkshape)
+        image_node = hdf_file.get_node('/',name=array_name)
+        image_node.attrs.element_size_um = np.array([(pixel_size_um,)]*3).astype(np.float32)
+        image_node.attrs.image_metadata = image_metadata
+    except:
+        print('error in saving image array to hdf file')
+    hdf_file.close()
 
 def read_hdf_image(filename,bbox=None,array_name='image'):
 	"""reads in image from hdf file with given bbox. significantly (~100x) faster when reading in a
