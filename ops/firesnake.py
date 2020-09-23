@@ -765,6 +765,30 @@ class Snake():
         return (Snake._extract_bases(maxed, peaks, cells, bases=['-'],
                     threshold_peaks=threshold_peaks, wildcards=wildcards))
 
+## timelapse
+    @staticmethod
+    def _align_stage_drift(data,frames=10):
+        '''Correct minor stage drift across first frames of timelapse due to plate settling into
+        plate holder. Currently works only with timelapse of single channel, single z-slice images.
+        "frames" should be set such that the from the "frames"th frame on, there is approximately 
+        no more stage drift.
+        '''
+        offsets = []
+        data = np.squeeze(data)
+        for source,target in zip(data[:(frames-1)],data[1:frames]):
+            windowed = Align.apply_window(np.array([target,source]),window=2)
+            offsets.append(Align.calculate_offsets(windowed,upsample_factor=1))
+        offsets = np.array([offset[1] for offset in offsets])
+
+        # sum offsets from end -> beginning
+        offsets = np.cumsum(offsets[::-1],axis=0)[::-1]
+
+        aligned = Align.apply_offsets(data[:(frames)], offsets)
+
+        aligned = np.concatenate([aligned,data[(frames-1):]])
+
+        return aligned[:,None]
+
     @staticmethod
     def _track_live_nuclei(nuclei, tolerance_per_frame=5):
         
