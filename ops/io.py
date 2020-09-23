@@ -245,7 +245,7 @@ def read_stack(filename, copy=True):
 def open_hdf_file(filename,mode='r'):
     return tables.file.open_file(filename,mode=mode)
 
-def read_hdf_image(filename,bbox=None,array_name='image',memoize=False):
+def read_hdf_image(filename,bbox=None,leading_dims=None,array_name='image',memoize=False):
     """reads in image from hdf file with given bbox. significantly (~100x) faster when reading in a
     100x100 pixel chunk compared to reading in an entire 1480x1480 tif.
     WARNING: metadata is read into cache on first access; if file metadata changes, re-reading the file will 
@@ -262,7 +262,10 @@ def read_hdf_image(filename,bbox=None,array_name='image',memoize=False):
             #check if bbox is in image bounds
             i0, j0 = max(bbox[0], 0), max(bbox[1], 0)
             i1, j1 = min(bbox[2], image_node.shape[-2]), min(bbox[3], image_node.shape[-1])
-            image = image_node[...,i0:i1,j0:j1]
+            if leading_dims is None:
+                image = image_node[...,i0:i1,j0:j1]
+            else:
+                image = image_node[leading_dims+(slice(i0,i1),slice(j0,j1))]
         else:
             image = image_node[...]
     except:
