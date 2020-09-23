@@ -835,7 +835,7 @@ class Snake():
                )
 
         # give un-tracked cells a unique id
-        missing = sorted(set(range(int(df['id'].max())))-set(df['id']))
+        missing = sorted(set(range(df.pipe(len)))-set(df['id']))
         df.loc[df['id'].isna(),'id'] = missing
 
         # set relabeling values
