@@ -220,7 +220,7 @@ def remove_overlap(xs, ys):
     ys = set(map(tuple, ys))
     return [tuple(x) for x in xs if tuple(x) not in ys]
 
-def brute_force_pairs(df_0, df_1, n_jobs=-2,tqdm=True):
+def brute_force_pairs(df_0, df_1, threshold_point=2, n_jobs=-2,tqdm=True):
     work = df_1.groupby('site')
     if tqdm:
         from tqdm import tqdm_notebook as tqdn
@@ -229,7 +229,7 @@ def brute_force_pairs(df_0, df_1, n_jobs=-2,tqdm=True):
     for site, df_s in work:
 
         def work_on(df_t):
-            rotation, translation, score = evaluate_match(df_t, df_s)
+            rotation, translation, score = evaluate_match(df_t, df_s, threshold_point=threshold_point)
             determinant = None if rotation is None else np.linalg.det(rotation)
             result = pd.Series({'rotation': rotation, 
                                 'translation': translation, 
@@ -311,7 +311,7 @@ def plot_alignments(df_ph, df_sbs, df_align, site):
     return ax
 
 def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.186),
-                        initial_sites=8, batch_size=180, tqdm=True, n_jobs=-2):
+                        initial_sites=8, batch_size=180, threshold_point=2, tqdm=True, n_jobs=-2):
     """Provide triangles from one well only. Intitial_sites can be a list of tuples with pre-determined
     matching pairs of sites [(tile_0,site_0),...]. Should be good with 5-8 initial sites.
     rotation: rotation matrix
@@ -321,7 +321,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
     """
 
     def work_on(df_t, df_s):
-        rotation, translation, score = evaluate_match(df_t, df_s)
+        rotation, translation, score = evaluate_match(df_t, df_s, threshold_point=threshold_point)
         determinant = None if rotation is None else np.linalg.det(rotation)
         result = pd.Series({'rotation': rotation, 
                             'translation': translation, 
@@ -343,7 +343,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
             .sample(initial_sites, replace=False, random_state=0)
             .pipe(list))
 
-        df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'),tqdm=tqdm, n_jobs=n_jobs)
+        df_initial = brute_force_pairs(df_0, df_1.query('site == @sites'),threshold_point=threshold_point,tqdm=tqdm, n_jobs=n_jobs)
 
     # dets = df_initial.query('score > 0.3')['determinant']
     # d0, d1 = dets.min(), dets.max()
