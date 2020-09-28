@@ -842,7 +842,7 @@ class Snake():
         df_relabel = ops.timelapse.format_trackmate(df[['id','cell','frame','parent_ids']])
 
         df_relabel = (df
-            .merge(df_relabel[['id','relabel']],how='left',on='id')
+            .merge(df_relabel[['id','relabel','parent_cell_0','parent_cell_1']],how='left',on='id')
             .drop(columns=['id','parent_ids'])
             )
 
