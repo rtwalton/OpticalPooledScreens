@@ -337,4 +337,113 @@ def plot_traces(df, ax, sgRNA_label, color):
     ax.plot(x.T, y.T, c=color, alpha=0.2)
     ax.set_title(sgRNA_label)
     
+# timelapse montages
+
+def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
+    # maximum of subimages from a single timelapse frame
+    max_frame_bounds = max([len(bound) for bound in bounds])
+    
+    # maximum shape of subimage
+    max_bound_shape = tuple(np.array([(bound[2]-bound[0],bound[3]-bound[1]) 
+                                for frame_bounds 
+                                in bounds 
+                                for bound 
+                                in frame_bounds])
+                            .max(axis=0)
+                           )
+    
+    if frames is None:
+        frames = list(range(len(bounds)))
+    if max_frames is None:
+        max_frames = len(frames)
+        
+    I = np.zeros((max_frames,1,max_bound_shape[0],max_bound_shape[1]*max_frame_bounds),dtype=np.uint16)
+    
+    for frame_count,(frame,frame_bounds) in enumerate(zip(frames,bounds)):
+        leading_dims = (slice(frame,frame+1),slice(None))
+        
+        for bound_count,bound in enumerate(frame_bounds):
+            data = read_hdf_image(filename, leading_dims=leading_dims, bbox=bound)
+            I[(slice(frame_count,frame_count+1),
+               slice(None),
+               slice(0,data.shape[-2]),
+               slice(max_bound_shape[1]*bound_count,(max_bound_shape[1]*bound_count)+data.shape[-1]))] = data
+    return I
+
+def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, 
+    file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
+    df_guide = (df_guide
+                .drop_duplicates(['plate','well','tile','track_id','tracked_cell','frame'])
+                .sort_values(['tracked_length','track_id','frame','tracked_cell'])
+                .pipe(ops.annotate.add_rect_bounds,width=cell_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
+               )
+    
+    arr = []
+    
+    if max_frames is None:
+        max_frames = df_guide['frame'].nunique()
+    
+    for (plate,well,tile,track_id),df_track in tqdm.notebook.tqdm(df_guide.groupby(['plate','well','tile','track_id'])):
+        arr.append(subimage_timelapse(file_pattern.format(plate=plate,well=well,tile=tile),
+                                    frames=sorted(df_track['frame'].unique()),
+                                    max_frames=max_frames,
+                                    bounds=[df['bounds'].tolist() for _,df in df_track.groupby('frame')]#,
+                                   )
+                  )
+    fill = montage_width-(int(sum([track.shape[-1] for track in arr])/(cell_width*2))%montage_width)
+    print()
+    arr.append(np.zeros((max_frames,1,(cell_width*2),(cell_width*2*fill)),dtype=np.uint16))
+    montage = np.concatenate(arr,axis=-1)
+    return np.concatenate(np.split(montage,montage.shape[-1]/(montage_width*cell_width*2),axis=-1),axis=-2)
+
+def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, max_frames=None, 
+    file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
+    df_tracks = (df_guide
+                .drop_duplicates(['plate','well','tile','track_id','tracked_cell','frame'])
+                .sort_values(['tracked_length','track_id','frame','tracked_cell'])
+                .groupby(['plate','well','tile','track_id','frame'])
+                [['i_tracked','j_tracked']]
+                .mean()
+                .reset_index()
+                .pipe(ops.annotate.add_rect_bounds,width=track_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
+               )
+    
+    arr = []
+    
+    if max_frames is None:
+        max_frames = df_guide['frame'].nunique()
+    
+    for (plate,well,tile,track_id),df_track in tqdm.notebook.tqdm(df_tracks.groupby(['plate','well','tile','track_id'])):
+        arr.append(tracked_subimage(file_pattern.format(plate=plate,well=well,tile=tile),
+                                    frames=sorted(df_track['frame'].unique()),
+                                    max_frames=max_frames,
+                                    bounds=[df['bounds'].tolist() for _,df in df_track.groupby('frame')]
+                                   )
+                  )
+    fill = montage_width-(int(sum([track.shape[-1] for track in arr])/(track_width*2))%montage_width)
+    arr.append(np.zeros((max_frames,1,(track_width*2),(track_width*2*fill)),dtype=np.uint16))
+    montage = np.concatenate(arr,axis=-1)
+    return np.concatenate(np.split(montage,montage.shape[-1]/(montage_width*track_width*2),axis=-1),axis=-2)
+
+def timelapse_montage_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA',
+                           file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
+    from ops.utils import pile,montage
+    arr = []
+    max_frames = df_gene['frame'].nunique()
+    
+    for guide_count,(_,df_guide) in enumerate(df_gene.groupby('sgRNA')):
+        guide_montage = timelapse_montage_guide(df_guide,
+                                                cell_width=cell_width,
+                                                montage_width=montage_width,
+                                                max_frames=max_frames,
+                                                file_pattern=file_pattern
+                                               )
+        if guide_count != 0:
+            guide_montage = np.concatenate([np.zeros(guide_montage.shape[:-2]+(cell_width*2,guide_montage.shape[-1]),dtype=np.uint16),
+                                       guide_montage],
+                                      axis=-2
+                                     )
+        arr.append(guide_montage)
+        
+    return np.concatenate(arr,axis=-2)
 
