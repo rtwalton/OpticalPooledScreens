@@ -372,10 +372,11 @@ def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
 
 def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, 
     file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
+    from ops.annotate import add_rect_bounds
     df_guide = (df_guide
                 .drop_duplicates(['plate','well','tile','track_id','tracked_cell','frame'])
                 .sort_values(['tracked_length','track_id','frame','tracked_cell'])
-                .pipe(ops.annotate.add_rect_bounds,width=cell_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
+                .pipe(add_rect_bounds,width=cell_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
                )
     
     arr = []
@@ -398,6 +399,7 @@ def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frame
 
 def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, max_frames=None, 
     file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
+    from ops.annotate import add_rect_bounds
     df_tracks = (df_guide
                 .drop_duplicates(['plate','well','tile','track_id','tracked_cell','frame'])
                 .sort_values(['tracked_length','track_id','frame','tracked_cell'])
@@ -405,7 +407,7 @@ def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, m
                 [['i_tracked','j_tracked']]
                 .mean()
                 .reset_index()
-                .pipe(ops.annotate.add_rect_bounds,width=track_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
+                .pipe(add_rect_bounds,width=track_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
                )
     
     arr = []
@@ -427,7 +429,6 @@ def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, m
 
 def timelapse_montage_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA',
                            file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
-    from ops.utils import pile,montage
     arr = []
     max_frames = df_gene['frame'].nunique()
     
