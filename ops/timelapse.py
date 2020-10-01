@@ -340,7 +340,8 @@ def plot_traces(df, ax, sgRNA_label, color):
 # timelapse montages
 
 def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
-    from ops.io import read_hdf_image
+    # from ops.io import read_hdf_image
+    import tables
     # maximum of subimages from a single timelapse frame
     max_frame_bounds = max([len(bound) for bound in bounds])
     
@@ -359,16 +360,29 @@ def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
         max_frames = len(frames)
         
     I = np.zeros((max_frames,1,max_bound_shape[0],max_bound_shape[1]*max_frame_bounds),dtype=np.uint16)
+
+    hdf_file = tables.file.open_file(filename,mode='r')
+    image_node = hdf_file.get_node('/',name='image')
     
     for frame_count,(frame,frame_bounds) in enumerate(zip(frames,bounds)):
         leading_dims = (slice(frame,frame+1),slice(None))
         
         for bound_count,bound in enumerate(frame_bounds):
-            data = read_hdf_image(filename, leading_dims=leading_dims, bbox=bound)
+            i0, j0 = max(bound[0], 0), max(bound[1], 0)
+            i1, j1 = min(bound[2], image_node.shape[-2]), min(bound[3], image_node.shape[-1])
+
+            try:
+                data = image_node[leading_dims+(slice(i0,i1),slice(j0,j1))]
+            except:
+                print('error')
+                data = None
+
             I[(slice(frame_count,frame_count+1),
                slice(None),
                slice(0,data.shape[-2]),
                slice(max_bound_shape[1]*bound_count,(max_bound_shape[1]*bound_count)+data.shape[-1]))] = data
+
+    hdf_file.close()
     return I
 
 def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, tqdm=False, 
