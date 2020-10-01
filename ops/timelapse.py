@@ -340,6 +340,7 @@ def plot_traces(df, ax, sgRNA_label, color):
 # timelapse montages
 
 def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
+    from ops.io import read_hdf_image
     # maximum of subimages from a single timelapse frame
     max_frame_bounds = max([len(bound) for bound in bounds])
     
@@ -370,9 +371,10 @@ def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
                slice(max_bound_shape[1]*bound_count,(max_bound_shape[1]*bound_count)+data.shape[-1]))] = data
     return I
 
-def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, 
+def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, tqdm=False, 
     file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
     from ops.annotate import add_rect_bounds
+
     df_guide = (df_guide
                 .drop_duplicates(['plate','well','tile','track_id','tracked_cell','frame'])
                 .sort_values(['tracked_length','track_id','frame','tracked_cell'])
@@ -383,8 +385,14 @@ def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frame
     
     if max_frames is None:
         max_frames = df_guide['frame'].nunique()
+
+    if tqdm:
+        import tqdm.notebook
+        work = tqdm.notebook.tqdm(df_guide.groupby(['plate','well','tile','track_id']))
+    else:
+        work = df_guide.groupby(['plate','well','tile','track_id'])
     
-    for (plate,well,tile,track_id),df_track in tqdm.notebook.tqdm(df_guide.groupby(['plate','well','tile','track_id'])):
+    for (plate,well,tile,track_id),df_track in work:
         arr.append(subimage_timelapse(file_pattern.format(plate=plate,well=well,tile=tile),
                                     frames=sorted(df_track['frame'].unique()),
                                     max_frames=max_frames,
@@ -392,12 +400,11 @@ def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frame
                                    )
                   )
     fill = montage_width-(int(sum([track.shape[-1] for track in arr])/(cell_width*2))%montage_width)
-    print()
     arr.append(np.zeros((max_frames,1,(cell_width*2),(cell_width*2*fill)),dtype=np.uint16))
     montage = np.concatenate(arr,axis=-1)
     return np.concatenate(np.split(montage,montage.shape[-1]/(montage_width*cell_width*2),axis=-1),axis=-2)
 
-def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, max_frames=None, 
+def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, max_frames=None, tqdm=False,
     file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
     from ops.annotate import add_rect_bounds
     df_tracks = (df_guide
@@ -414,8 +421,14 @@ def timelapse_montage_guide_track(df_guide, track_width=100, montage_width=10, m
     
     if max_frames is None:
         max_frames = df_guide['frame'].nunique()
+
+    if tqdm:
+        import tqdm.notebook
+        work = tqdm.notebook.tqdm(df_guide.groupby(['plate','well','tile','track_id']))
+    else:
+        work = df_guide.groupby(['plate','well','tile','track_id'])
     
-    for (plate,well,tile,track_id),df_track in tqdm.notebook.tqdm(df_tracks.groupby(['plate','well','tile','track_id'])):
+    for (plate,well,tile,track_id),df_track in work:
         arr.append(tracked_subimage(file_pattern.format(plate=plate,well=well,tile=tile),
                                     frames=sorted(df_track['frame'].unique()),
                                     max_frames=max_frames,
