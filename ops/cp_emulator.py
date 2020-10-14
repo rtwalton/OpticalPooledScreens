@@ -170,21 +170,27 @@ intensity_features = {
 	'std': lambda r: np.std(r.intensity_image[r.image]),
 	'max': lambda r: r.intensity_image[r.image].max(),
 	'min': lambda r: r.intensity_image[r.image].min(),
-	'int_edge': lambda r: r.intensity_image[boundaries(r.filled_image,mode='inner',connectivity=EDGE_CONNECTIVITY)].sum(),
-	'mean_edge': lambda r: r.intensity_image[boundaries(r.filled_image,mode='inner',connectivity=EDGE_CONNECTIVITY)].mean(),
-	'std_edge': lambda r: np.std(r.intensity_image[boundaries(r.filled_image,mode='inner',connectivity=EDGE_CONNECTIVITY)]),
-	'max_edge': lambda r: r.intensity_image[boundaries(r.filled_image,mode='inner',connectivity=EDGE_CONNECTIVITY)].max(),
-	'min_edge': lambda r: r.intensity_image[boundaries(r.filled_image,mode='inner',connectivity=EDGE_CONNECTIVITY)].min(),
+	'edge_intensity_feature': lambda r: edge_intensity_features(r.intensity_image,r.filled_image,mode='inner',connectivity=EDGE_CONNECTIVITY),
 	'mass_displacement': lambda r: np.sqrt(((np.array(r.local_centroid) - np.array(r.weighted_local_centroid))**2).sum()),
 	'lower_quartile': lambda r: np.percentile(r.intensity_image[r.image],25),
     'median': lambda r: np.median(r.intensity_image[r.image]),
     'mad': lambda r: median_absolute_deviation(r.intensity_image[r.image],scale=1),
     'upper_quartile': lambda r: np.percentile(r.intensity_image[r.image],75),
-    'center_mass_r': lambda r: r.weighted_local_centroid[0],
-    'center_mass_c': lambda r: r.weighted_local_centroid[1],
-    'max_location_r': lambda r: np.unravel_index(np.argmax(r.intensity_image), (r.image).shape)[0],
-    'max_location_c': lambda r: np.unravel_index(np.argmax(r.intensity_image), (r.image).shape)[1]
+    'center_mass': lambda r: r.weighted_local_centroid, # this property is not cached
+    'max_location':lambda r: np.unravel_index(np.argmax(r.intensity_image), (r.image).shape)
     }
+
+intensity_columns = {
+	'edge_intensity_feature_0':'int_edge',
+	'edge_intensity_feature_1':'mean_edge',
+	'edge_intensity_feature_2':'std_edge',
+	'edge_intensity_feature_3':'max_edge',
+	'edge_intensity_feature_4':'min_edge',
+	'center_mass_0':'center_mass_r',
+	'center_mass_1':'center_mass_c',
+	'max_location_0':'max_location_r',
+	'max_location_1':'max_location_c'
+}
 
 
 # # MeasureObjectNeighbors:'Measure the adjacency statistics for the cells. Cells within 5 pixels of each other are considered neighbors.'
@@ -301,16 +307,13 @@ shape_features = {
 	'solidity': lambda r: r.solidity,
 	'extent': lambda r: r.extent,
 	'euler_number': lambda r: r.euler_number,
-	'centroid_r': lambda r: r.local_centroid[0], # ACTUALLY SHOULD BE POINT FARTHEST FROM EDGE?
-	'centroid_c': lambda r: r.local_centroid[1], # ACTUALLY SHOULD BE POINT FARTHEST FROM EDGE?
+	'centroid': lambda r: r.local_centroid, # ACTUALLY SHOULD BE POINT FARTHEST FROM EDGE?
 	'eccentricity': lambda r: r.eccentricity,
 	'major_axis' : lambda r: r.major_axis_length,
     'minor_axis' : lambda r: r.minor_axis_length,
     'orientation' : lambda r: r.orientation,
     'compactness' : lambda r: 2*np.pi*(r.moments_central[0,2]+r.moments_central[2,0])/(r.area**2),
-    'max_radius' : lambda r: distance_transform(np.pad(r.filled_image,1,'constant')).max(), #filled_image or image?
-    'median_radius' : lambda r: np.median(distance_transform(np.pad(r.filled_image,1,'constant'))[1:-1,1:-1][r.filled_image]), #filled_image or image?
-    'mean_radius' : lambda r: distance_transform(np.pad(r.filled_image,1,'constant'))[1:-1,1:-1][r.filled_image].mean(), #filled_image or image?
+    'radius' : lambda r: max_median_mean_radius(r.filled_image),
     'feret_diameter' : lambda r: min_max_feret_diameter(r.coords),
     # 'min_feret' : lambda r: minimum_feret_diameter(r.coords),
     # 'max_feret' : lambda r: maximum_feret_diameter(r.coords),
@@ -323,6 +326,11 @@ for azimuthal in range(radial%2,radial+2,2)]
 
 shape_columns = {'zernike_'+str(num):zernike_num for num,zernike_num in enumerate(zernike_nums)}
 shape_columns.update({
+	'centroid_0':'centroid_r',
+	'centroid_1':'centroid_c',
+	'radius_0':'max_radius',
+	'radius_1':'median_radius',
+	'radius_2':'mean_radius',
 	'feret_diameter_0':'min_feret_diameter',
 	'feret_diameter_1':'max_feret_diameter',
 })
@@ -375,6 +383,9 @@ grayscale_features = {**intensity_features,
 					  # **granularity_features
 					 }
 
+grayscale_columns = {**intensity_columns,
+					 **intensity_distribution_columns
+					}
 ######################################################################################################################################
 
 def lstsq_slope(r,first,second):
@@ -582,6 +593,16 @@ def boundaries(labeled,connectivity=1,mode='inner',background=0):
     padded = np.pad(labeled,pad_width=pad_width,mode='constant',constant_values=background)
     return find_boundaries(padded,**kwargs)[...,pad_width:-pad_width,pad_width:-pad_width]
 
+def edge_intensity_features(intensity_image,filled_image,**kwargs):
+	edge_pixels = intensity_image[boundaries(filled_image,**kwargs)]
+
+	return (edge_pixels.sum(),
+		edge_pixels.mean(),
+		np.std(edge_pixels),
+		edge_pixels.max(),
+		edge_pixels.min()
+		)
+
 def closest_objects(labeled,n_cpu=1):
 	from ops.process import feature_table
 	from scipy.spatial import cKDTree
@@ -733,6 +754,14 @@ def radial_wedges(image, center):
 	abs_i_greater_j = abs(i - center[0]) > abs(j - center[1])
 
 	return ((positive_i + positive_j * 2 + abs_i_greater_j * 4 + 1)*image).astype(int)
+
+def max_median_mean_radius(filled_image):
+	transformed = distance_transform(np.pad(filled_image,1,'constant'))[1:-1,1:-1][filled_image]
+
+	return (transformed.max(),
+		np.median(transformed),
+		transformed.mean()
+		)
 
 def min_max_feret_diameter(coords):
 	hull_vertices = coords[ConvexHull(coords).vertices]
