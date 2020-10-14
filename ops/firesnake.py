@@ -637,7 +637,7 @@ class Snake():
 
         # nucleus grayscale channel features
         dfs.extend([(Snake._extract_features_bare(data_phenotype[...,channel,:,:],nuclei,ops.cp_emulator.grayscale_features)
-            .rename(columns=ops.cp_emulator.intensity_distribution_columns)
+            .rename(columns=ops.cp_emulator.grayscale_columns)
             .set_index('label')
             .rename(columns = lambda x: 'nucleus_'+channel_names[channel]+'_'+x)
             ) 
@@ -646,7 +646,7 @@ class Snake():
 
         # cell grayscale channel features
         dfs.extend([(Snake._extract_features_bare(data_phenotype[...,channel,:,:],cells,ops.cp_emulator.grayscale_features)
-            .rename(columns=ops.cp_emulator.intensity_distribution_columns)
+            .rename(columns=ops.cp_emulator.grayscale_columns)
             .set_index('label')
             .rename(columns = lambda x: 'cell_'+channel_names[channel]+'_'+x)
             ) 
