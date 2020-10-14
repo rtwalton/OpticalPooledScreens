@@ -1,5 +1,6 @@
 import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from itertools import product
 
 import skimage
@@ -26,17 +27,19 @@ def feature_table(data, labels, features, global_features=None):
     """
     regions = ops.utils.regionprops(labels, intensity_image=data)
     results = defaultdict(list)
-    for region in regions:
-        for feature, func in features.items():
-            result = func(region)
-            if isinstance(result,list)|isinstance(result,np.ndarray)|isinstance(result,tuple):
-                if len(result)==1:
-                    results[feature].append(result[0])
-                else:
+    for feature,func in features.items():
+        # check if iterable with first result
+        result_0 = func(regions[0])
+        if isinstance(result_0,Iterable):
+            if len(result_0)==1:
+                results[feature] = [func(region)[0] for region in regions]
+            else:
+                for result in map(func,regions):
                     for index,value in enumerate(result):
                         results[feature+'_{}'.format(index)].append(value)
-            else:
-                results[feature].append(func(region))
+        else:
+            results[feature] = list(map(func,regions))
+
     if global_features:
         for feature, func in global_features.items():
             results[feature] = func(data, labels)
