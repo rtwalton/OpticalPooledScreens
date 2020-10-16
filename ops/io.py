@@ -229,10 +229,11 @@ def grid_view(files, bounds, padding=40, with_mask=False,im_func=None,memoize=Tr
 
 
 @ops.utils.memoize(active=False)
-def read_stack(filename, copy=True):
+def read_stack(filename, copy=True, maxworkers=None):
     """Read a .tif file into a numpy array, with optional memory mapping.
+    `maxworkers` determines the number of threads used for decompression of compressed tiffs.
     """
-    data = imread(filename, multifile=False, is_ome=False)
+    data = imread(filename, multifile=False, is_ome=False, maxworkers=maxworkers)
     # preserve inner singleton dimensions
     while data.shape[0] == 1:
         data = np.squeeze(data, axis=(0,))

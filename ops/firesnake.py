@@ -896,8 +896,12 @@ class Snake():
             # and output (needed to save result)
             input_kwargs, output_kwargs = restrict_kwargs(kwargs, f)
 
+            load_kwargs = {}
+            if 'maxworkers' in output_kwargs:
+                load_kwargs['maxworkers'] = output_kwargs.pop('maxworkers')
+
             # load arguments provided as filenames
-            input_kwargs = {k: load_arg(v) for k,v in input_kwargs.items()}
+            input_kwargs = {k: load_arg(v,**load_kwargs) for k,v in input_kwargs.items()}
 
             results = f(**input_kwargs)
 
@@ -935,13 +939,13 @@ def remove_channels(data, remove_index):
 # IO
 
 
-def load_arg(x):
+def load_arg(x,**kwargs):
     """Try loading data from `x` if it is a filename or list of filenames.
     Otherwise just return `x`.
     """
-    one_file = load_file
-    many_files = lambda x: [load_file(f) for f in x]
-    nested_files = lambda x: [[load_file(f) for f in f_list] for f_list in x]
+    one_file = lambda x: load_file(x,**kwargs)
+    many_files = lambda x: [load_file(f,**kwargs) for f in x]
+    nested_files = lambda x: [[load_file(f,**kwargs) for f in f_list] for f_list in x]
     
     for f in one_file, many_files, nested_files:
         try:
@@ -993,8 +997,9 @@ def load_pkl(filename):
         return None
 
 
-def load_tif(filename):
-    return ops.io.read_stack(filename)
+def load_tif(filename,**kwargs):
+    kwargs, _ = restrict_kwargs(kwargs, ops.io.read_stack)
+    return ops.io.read_stack(filename,**kwargs)
 
 def load_hdf(filename):
     return ops.io_hdf.read_hdf_image(filename)
@@ -1031,7 +1036,7 @@ def restrict_kwargs(kwargs, f):
     return keep, discard
 
 
-def load_file(filename):
+def load_file(filename,**kwargs):
     """Attempt to load file, raising an error if the file is not found or 
     the file extension is not recognized.
     """
@@ -1040,7 +1045,7 @@ def load_file(filename):
     if not os.path.isfile(filename):
         raise IOError(2, 'Not a file: {0}'.format(filename))
     if filename.endswith('.tif'):
-        return load_tif(filename)
+        return load_tif(filename,**kwargs)
     elif filename.endswith('.pkl'):
         return load_pkl(filename)
     elif filename.endswith('.csv'):
