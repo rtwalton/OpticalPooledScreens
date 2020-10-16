@@ -11,14 +11,13 @@
 # Length scales needed for feature extraction should technically be correspondingly scaled,
 # e.g., 20X with 1x1 binning images should use suggested linear length scales * 2
 
-# potential features to add: Hu moments, PFTAS
-
 import numpy as np
 from scipy.stats import median_absolute_deviation, rankdata # new in version 1.3.0
 from scipy.spatial.distance import cdist
 from scipy.ndimage.morphology import distance_transform_edt as distance_transform
 from scipy.ndimage import map_coordinates
-from mahotas.features import zernike_moments, haralick
+from mahotas.features import haralick, pftas#, zernike_moments
+from mahotas.thresholding import otsu
 from scipy.spatial import ConvexHull
 from functools import partial
 from itertools import starmap, combinations
@@ -49,7 +48,7 @@ def apply_extract_features_cp(well_tile,filepattern):
                                            )
     df_result.to_csv(name(filepattern,subdir='process_ph',tag='cp_phenotype',ext='csv'))
 
-EDGE_CONNECTIVITY = 2
+EDGE_CONNECTIVITY = 2 # cellprofiler uses edge connectivity of 1, which exlucdes pixels catty-corner to a boundary
 
 ZERNIKE_DEGREE = 9
 
@@ -273,10 +272,12 @@ def neighbor_measurements(labeled, distances=[1,10],n_cpu=1):
 # center defined as point farthest from edge = np.argmax(distance_transform(np.pad(r.filled_image,1,'constant')))
 
 intensity_distribution_features = {
+	# to minimize re-computing values, outputs a numpy array of length 3*bins. order is [FracAtD, MeanFrac, RadialCV]*bins
+	# pretty expensive and dubious utility, leave out if computation is limiting
 	'intensity_distribution' : lambda r: np.array(
 		measure_intensity_distribution(r.filled_image,r.image,r.intensity_image,bins=4)
-		).reshape(-1)
-	# to minimize re-computing values, outputs a numpy array of length 3*bins. order is [FracAtD, MeanFrac, RadialCV]*bins
+		).reshape(-1),
+	'weighted_hu_moments': lambda r: r.weighted_moments_hu
 }
 
 intensity_distribution_columns = {
@@ -314,10 +315,11 @@ shape_features = {
     'orientation' : lambda r: r.orientation,
     'compactness' : lambda r: 2*np.pi*(r.moments_central[0,2]+r.moments_central[2,0])/(r.area**2),
     'radius' : lambda r: max_median_mean_radius(r.filled_image),
-    'feret_diameter' : lambda r: min_max_feret_diameter(r.coords),
-    # 'min_feret' : lambda r: minimum_feret_diameter(r.coords),
-    # 'max_feret' : lambda r: maximum_feret_diameter(r.coords),
-    'zernike' : lambda r: zernike_minimum_enclosing_circle(r.coords, degree=ZERNIKE_DEGREE) # cp/centrosome zernike divides zernike magnitudes by minimum enclosing circle magnitude; unclear why
+    # 'feret_diameter' : lambda r: min_max_feret_diameter(r.coords), # relatively expensive, likely high correlation with major/minor axis
+    'hu_moments': lambda r: r.moments_hu,
+    # zernike okay to remove if computation is limiting -- not many of these were retained in Rohban 2017 eLife and they are very (most) expensive
+    # cp/centrosome zernike divides zernike magnitudes by minimum enclosing circle magnitude; unclear why
+    'zernike' : lambda r: zernike_minimum_enclosing_circle(r.coords, degree=ZERNIKE_DEGREE)
 }
 
 zernike_nums = ['zernike_'+str(radial)+'_'+str(azimuthal) 
@@ -331,8 +333,8 @@ shape_columns.update({
 	'radius_0':'max_radius',
 	'radius_1':'median_radius',
 	'radius_2':'mean_radius',
-	'feret_diameter_0':'min_feret_diameter',
-	'feret_diameter_1':'max_feret_diameter',
+	# 'feret_diameter_0':'min_feret_diameter',
+	# 'feret_diameter_1':'max_feret_diameter',
 })
 
 # # MeasureTexture:'Measure the texture features in all objects, against all 5 channels, using multiple spatial scales.'
@@ -368,9 +370,13 @@ shape_columns.update({
 # if having issues with ValueError's can try: haralick, except: return [np.nan]*13
 
 texture_features = {
-	'haralick_5'  : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=5,  return_mean=True),
-	'haralick_10' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=10, return_mean=True),
-	# really slow
+	# PFTAS is an alternative to Haralick for texture: https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-110
+	# mahotas implementation has some quircks, e.g., outputs 54 features for 2D image: the 9 PFTAS statistics for 3 different binary images 
+	# and their complement. The first 9 features are the "realest" PFTAS statistics.
+	'pftas' : lambda r: masked_pftas(r.intensity_image),
+	'haralick_5'  : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=5,  return_mean=True)
+	# haralick computational cost increasing significantly with distance; just keep local 5 pixel texture here for most uses.
+	# 'haralick_10' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=10, return_mean=True),
 	# 'haralick_20' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=20, return_mean=True)
 }
 
@@ -985,6 +991,10 @@ def circumscribed_circle(p0,p1,p2):
 	center = np.array([Sx,Sy])/a
 	diameter = 2*np.sqrt((b/a) + (np.array([Sx,Sy])**2).sum()/(a**2))
 	return diameter,center
+
+def masked_pftas(intensity_image):
+	T = otsu(intensity_image,ignore_zeros=True)
+	return pftas(intensity_image,T=T)
 
 def ubyte_haralick(image,**kwargs):
 	with catch_warnings():
