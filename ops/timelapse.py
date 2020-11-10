@@ -295,6 +295,141 @@ def format_trackmate(df):
     
     return pd.concat(arr_frames).reset_index()
 
+# recover parent relationships
+## during some iterations of trackmate, saving of parent cell identities was unintentionally
+## commented out. these functions infer these relationships. For a single tile, correctly assigned
+## same parent-child relationships as trackmate for >99.8% of cells. Well-constrained problem.
+
+def recover_parents(df_tracked,threshold=60, cell='cell', keep_cols=['well','tile','track_id','cell']):
+    # to be run on a table from a single tile
+
+    # get junction cells
+    df_pre_junction = (df_tracked
+                       .groupby(['track_id',cell],group_keys=False)
+                       .apply(lambda x: x.nlargest(1,'frame'))
+                      )
+    df_post_junction = (df_tracked
+                        .groupby(['track_id',cell],group_keys=False)
+                        .apply(lambda x: x.nsmallest(1,'frame'))
+                       )
+    
+    arr = []
+    
+    # assign frame 0 cells or un-tracked cells with no parents
+    arr.append(df_post_junction
+               .query('frame==0 | track_id==-1')
+               [keep_cols]
+               .assign(parent_cell_0=-1,parent_cell_1=-1)
+              )
+    
+    # clean up tables
+    last_frame = int(df_tracked['frame'].nlargest(1))
+    df_pre_junction = df_pre_junction.query('frame!=@last_frame & track_id!=-1')
+    df_post_junction = df_post_junction.query('frame!=0 & track_id!=-1')
+    
+    # categorize frames to avoid issues with no-cell junction frames
+    df_pre_junction.loc[:,'frame'] = pd.Categorical(df_pre_junction['frame'],
+                                                      categories=np.arange(0,last_frame),
+                                                      ordered=True)
+    df_post_junction.loc[:,'frame'] = pd.Categorical(df_post_junction['frame'],
+                                                      categories=np.arange(1,last_frame+1),
+                                                      ordered=True)
+    
+    for (frame_pre,df_pre),(frame_post,df_post) in zip(df_pre_junction.groupby('frame'),
+                                                       df_post_junction.groupby('frame')):
+        if df_post.pipe(len)==0:
+            continue
+        elif df_pre.pipe(len)==0:
+            arr.append(df_post[keep_cols].assign(parent_cell_0=-1,parent_cell_1=-1))
+        else:
+            arr.extend(junction_parent_assignment(pd.concat([df_pre,df_post]),
+                                               frame_0=frame_pre,
+                                               threshold=threshold,
+                                               cell=cell,
+                                               keep_cols=keep_cols
+                                              )
+                      )
+        
+    return pd.concat(arr,ignore_index=True)
+
+def junction_parent_assignment(df_junction, frame_0, threshold, cell, keep_cols):
+    arr = []
+    for track,df_track_junction in df_junction.groupby('track_id'):
+        if (df_track_junction['frame'].nunique()==1):
+            if df_track_junction.iloc[0]['frame']==(frame_0+1):
+                # only post-junction cells -> parents = -1
+                arr.append(df_track_junction[keep_cols].assign(parent_cell_0=-1,parent_cell_1=-1))
+            elif df_track_junction.iloc[0]['frame']==frame_0:
+                if df_track_junction.iloc[0]['track_id']==0:
+                # only pre-junction cells -> ends of tracks, don't have to assign
+                continue
+        else:
+            before,after = (g[[cell,'i','j']].values 
+                            for _,g 
+                            in df_track_junction.groupby('frame')
+                           )
+            distances = cdist(after[:,1:],before[:,1:])
+            edges = distances<threshold
+
+            edges = resolve_conflicts(edges,distances, conflict_type='extra')
+            edges = resolve_conflicts(edges,distances,conflict_type='tangle')
+
+            parents = tuple(before[edge,0] 
+                            if edge.sum()>0 else np.array([-1,-1]) 
+                            for edge in edges)
+
+            if len(parents) != edges.shape[0]:
+                raise ValueError('Length of parents tuple does not match number of post-junction cells')
+
+            if max([len(p) for p in parents])>2:
+                raise ValueError(f'''Conflict resolution error; too many parents selected for at least one cell 
+                for track {track} in frame {frame_0}
+                                 ''')
+
+            parents = np.array([np.concatenate([p,np.array([-1])])
+                                if len(p)==1
+                                else p
+                                for p in parents
+                               ]
+                              )
+            
+            arr.append(df_track_junction.query('frame==@frame_0+1')
+                       [keep_cols]
+                       .assign(parent_cell_0=parents[:,0],parent_cell_1=parents[:,1])
+                      )
+
+    return arr 
+
+def resolve_conflicts(edges,distances,conflict_type='tangle'):
+    if conflict_type=='tangle':
+        # any cell with more than one edge is a potential conflict
+        edge_threshold = 1
+        conflict_threshold = 1
+    elif conflict_type=='extra':
+        # any cell with more than 2 edges is a potential conflict
+        edge_threshold = 2
+        conflict_threshold = 0
+
+    def evaluate_conflicts(edges,edge_threshold):
+        # check for conflicting edges
+        # conflicts matrix for `tangle`: 1 is an edge, >1 is a conflict edge
+        # for `extra`: >0 is a conflict edge: more than 2 edges to a single cell
+        conflicts = np.zeros(edges.shape)
+        conflicts += (edges.sum(axis=0)>edge_threshold)
+        conflicts += (edges.sum(axis=1)>edge_threshold)[:,None]
+        conflicts[~edges] = 0
+        return conflicts
+
+    conflicts = evaluate_conflicts(edges,edge_threshold)
+    
+    while (conflicts>conflict_threshold).sum()>0:
+        # remove longest edge
+        edges[distances==distances[conflicts>conflict_threshold].max()] = False
+        # re-evaluate conflicts
+        conflicts = evalutate_conflicts(edges,edge_threshold)
+        
+    return edges
+
 # plot traces
 
 def plot_traces_gene_stim(df, df_neg, gene):
