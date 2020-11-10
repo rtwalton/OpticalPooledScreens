@@ -362,7 +362,6 @@ def junction_parent_assignment(df_junction, frame_0, threshold, ij, cell, keep_c
                 # only post-junction cells -> parents = -1
                 arr.append(df_track_junction[keep_cols].assign(parent_cell_0=-1,parent_cell_1=-1))
             elif df_track_junction.iloc[0]['frame']==frame_0:
-                if df_track_junction.iloc[0]['track_id']==0:
                 # only pre-junction cells -> ends of tracks, don't have to assign
                 continue
         else:
