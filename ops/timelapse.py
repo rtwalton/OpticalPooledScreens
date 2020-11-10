@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import scipy.spatial.kdtree
 from collections import Counter
+from scipy.spatial.distance import cdist
 
 from scipy.interpolate import UnivariateSpline
 from statsmodels.stats.multitest import multipletests
