@@ -428,7 +428,7 @@ def resolve_conflicts(edges,distances,conflict_type='tangle'):
         # remove longest edge
         edges[distances==distances[conflicts>conflict_threshold].max()] = False
         # re-evaluate conflicts
-        conflicts = evalutate_conflicts(edges,edge_threshold)
+        conflicts = evaluate_conflicts(edges,edge_threshold)
         
     return edges
 
