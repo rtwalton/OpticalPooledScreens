@@ -300,7 +300,7 @@ def format_trackmate(df):
 ## commented out. these functions infer these relationships. For a single tile, correctly assigned
 ## same parent-child relationships as trackmate for >99.8% of cells. Well-constrained problem.
 
-def recover_parents(df_tracked,threshold=60, cell='cell', keep_cols=['well','tile','track_id','cell']):
+def recover_parents(df_tracked,threshold=60, cell='cell', ij=('i','j'), keep_cols=['well','tile','track_id','cell']):
     # to be run on a table from a single tile
 
     # get junction cells
@@ -345,6 +345,7 @@ def recover_parents(df_tracked,threshold=60, cell='cell', keep_cols=['well','til
             arr.extend(junction_parent_assignment(pd.concat([df_pre,df_post]),
                                                frame_0=frame_pre,
                                                threshold=threshold,
+                                               ij=ij,
                                                cell=cell,
                                                keep_cols=keep_cols
                                               )
@@ -352,8 +353,9 @@ def recover_parents(df_tracked,threshold=60, cell='cell', keep_cols=['well','til
         
     return pd.concat(arr,ignore_index=True)
 
-def junction_parent_assignment(df_junction, frame_0, threshold, cell, keep_cols):
+def junction_parent_assignment(df_junction, frame_0, threshold, ij, cell, keep_cols):
     arr = []
+    i,j = ij
     for track,df_track_junction in df_junction.groupby('track_id'):
         if (df_track_junction['frame'].nunique()==1):
             if df_track_junction.iloc[0]['frame']==(frame_0+1):
@@ -364,7 +366,7 @@ def junction_parent_assignment(df_junction, frame_0, threshold, cell, keep_cols)
                 # only pre-junction cells -> ends of tracks, don't have to assign
                 continue
         else:
-            before,after = (g[[cell,'i','j']].values 
+            before,after = (g[[cell,i,j]].values 
                             for _,g 
                             in df_track_junction.groupby('frame')
                            )
