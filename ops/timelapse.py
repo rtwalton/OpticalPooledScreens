@@ -574,7 +574,7 @@ def timelapse_montage_aligned_guide(df_guide, cell_width=60, montage_width=25, m
 
     if tqdm:
         import tqdm.notebook
-        work = tqdm.notebook.tqdm(df_guide.groupby(['plate','well','tile','tracked_cell']),sort=False)
+        work = tqdm.notebook.tqdm(df_guide.groupby(['plate','well','tile','tracked_cell'],sort=False))
     else:
         work = df_guide.groupby(['plate','well','tile','tracked_cell'],sort=False)
     
