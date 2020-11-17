@@ -502,7 +502,7 @@ def subimage_timelapse(filename, bounds, frames=None, max_frames=None):
     image_node = hdf_file.get_node('/',name='image')
     
     for frame_count,(frame,frame_bounds) in enumerate(zip(frames,bounds)):
-        frame = np.clip(frame,0,image_node.shape[0])
+        frame = np.clip(frame,0,image_node.shape[0]-1)
         leading_dims = (slice(frame,frame+1),slice(None))
         #THREAD THIS?
         
