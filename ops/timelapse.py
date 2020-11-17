@@ -563,7 +563,9 @@ def timelapse_montage_aligned_guide(df_guide, cell_width=60, montage_width=25, m
 
     df_guide = (df_guide
                 # .drop_duplicates(['plate','well','tile','track_id','tracked_cell','frame'])
-                .sort_values(['frame_count','plate','well','tile','tracked_cell','frame'])
+                .sort_values(['frame_count','plate','well','tile','tracked_cell','frame'],
+                    ascending=[False,True,True,True,True,True]
+                    )
                 .pipe(add_rect_bounds,width=cell_width,ij=['i_tracked','j_tracked'],bounds_col='bounds')
                )
     
