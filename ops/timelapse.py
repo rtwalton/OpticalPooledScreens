@@ -648,7 +648,7 @@ def timelapse_montage_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA
         
     return np.concatenate(arr,axis=-2)
 
-def timelapse_montage_aligned_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA',max_frames=None,
+def timelapse_montage_aligned_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA',max_frames=None, tqdm=False,
                        file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
     arr = []
     if max_frames is None:
@@ -659,7 +659,8 @@ def timelapse_montage_aligned_gene(df_gene,cell_width=40,montage_width=25,groupb
                                                 cell_width=cell_width,
                                                 montage_width=montage_width,
                                                 max_frames=max_frames,
-                                                file_pattern=file_pattern
+                                                file_pattern=file_pattern,
+                                                tqdm=tqdm
                                                )
         if guide_count != 0:
             guide_montage = np.concatenate([np.zeros(guide_montage.shape[:-2]+(cell_width*2,guide_montage.shape[-1]),dtype=np.uint16),
