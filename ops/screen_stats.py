@@ -56,7 +56,34 @@ def get_simple_stats(df_stats):
      .assign(TNFa_rank=lambda x: x['TNFa'].rank().astype(int))
     )
 
-def plot_distributions(df_cells, gene):
+def plot_distributions(df_cells, gene, col='dapi_gfp_corr_nuclear',
+    control_query='gene_symbol=="nt"', replicate_col='replicate', conditions_col='stimulant',
+    conditions = ['TNFa', 'IL1b'], range=(-1,1), n_bins=100
+    ):
+    
+    df_neg = (df_cells
+     .query(control_query).assign(sgRNA='nontargeting'))
+    df_gene = df_cells.query('gene_symbol == @gene')
+    df_plot = pd.concat([df_neg, df_gene])
+
+    replicates = sorted(set(df_plot[replicate_col]))
+    if range=='infer':
+        range = (df_plot[col].min(),df_plot[col].max())
+
+    bins = np.linspace(range[0], range[1], n_bins)
+    hist_kws = dict(bins=bins, 
+        histtype='step', density=True, 
+                    cumulative=True)
+    row_order = conditions
+    fg = (df_plot
+     .pipe(sns.FacetGrid, hue='sgRNA', col_order=replicates,
+           col=replicate_col, row=conditions_col, row_order=conditions)
+     .map(plt.hist, col, **hist_kws)
+    )
+    
+    return fg
+
+def plot_distributions_nfkb(df_cells, gene):
     
     df_neg = (df_cells
      .query('gene_symbol == "nt"').assign(sgRNA_name='nt'))
