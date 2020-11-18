@@ -595,5 +595,20 @@ def timelapse_montage_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA
                                       axis=-2
                                      )
         arr.append(guide_montage)
+
+    try:
+        gene_montage = np.concatenate(arr,axis=-2)
+    except:
+        # one guide has fewer subimages than then the value of montage_width
+        width = max([m.shape[-1] for m in arr])
+        arr_fill = []
+        for m in arr:
+            if m.shape[-1] != width:
+                filled = np.zeros(m.shape[:-1]+(width,),dtype=m.dtype)
+                filled[...,:m.shape[-1]] = m
+                arr_fill.append(filled)
+            else:
+                arr_fill.append(m)
+        gene_montage = np.concatenate(arr_fill,axis=-2)
         
-    return np.concatenate(arr,axis=-2)
+    return gene_montage
