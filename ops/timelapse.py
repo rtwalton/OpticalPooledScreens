@@ -6,6 +6,7 @@ import numpy as np
 import scipy.spatial.kdtree
 from collections import Counter
 from scipy.spatial.distance import cdist
+
 from skimage import img_as_ubyte
 
 from scipy.interpolate import UnivariateSpline
@@ -575,8 +576,8 @@ def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frame
     # arr.append(np.zeros((max_frames,1,(cell_width*2),(cell_width*2*fill)),dtype=arr[0].dtype))
     # montage = np.concatenate(arr,axis=-1)
     # return np.concatenate(np.split(montage,montage.shape[-1]/(montage_width*cell_width*2),axis=-1),axis=-2)
-    piled = pile(arr)
-    return montage(piled,shape=(-1,montage_width))
+    piled = ops.utils.pile(arr)
+    return ops.utils.montage(piled,shape=(-1,montage_width))
 
 # def timelapse_montage_aligned_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, tqdm=False, 
 #     file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf'):
