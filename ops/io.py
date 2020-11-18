@@ -355,7 +355,7 @@ def save_stack(name, data, luts=None, display_ranges=None,
         if dimensions is None:
             dimensions = 'TZC'[::-1][:len(leading_shape)][::-1]
 
-        if 'C' not in dimensions:
+        if ('C' not in dimensions)|(nchannels==1):
             # TODO: support lut
             contrast = single_contrast(data, display_ranges)
             description = imagej_description(leading_shape, dimensions, 
