@@ -478,7 +478,7 @@ def plot_traces(df, ax, sgRNA_label, color):
     
 # timelapse montages
 
-def subimage_timelapse(filename, bounds, frames=None, max_frames=None, cast_ubyte=True):
+def subimage_timelapse(filename, bounds, frames=None, max_frames=None, frame_offset=0, cast_ubyte=True):
     import tables
     # maximum of subimages from a single timelapse frame
     max_frame_bounds = max([len(bound) for bound in bounds])
@@ -524,7 +524,7 @@ def subimage_timelapse(filename, bounds, frames=None, max_frames=None, cast_ubyt
                 print('error')
                 data = None
 
-            I[(slice(frame_count,frame_count+1),
+            I[(slice(frame_count+frame_offset,frame_count+frame_offset+1),
                slice(None),
                slice(0,data.shape[-2]),
                slice(max_bound_shape[1]*bound_count,(max_bound_shape[1]*bound_count)+data.shape[-1]))] = data
@@ -532,7 +532,7 @@ def subimage_timelapse(filename, bounds, frames=None, max_frames=None, cast_ubyt
     hdf_file.close()
     return I
 
-def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, montage_style='aligned',
+def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frames=None, montage_style='aligned', offset_frames=None,
     file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf', tqdm=False, cast_ubyte=True):
     from ops.annotate import add_rect_bounds
 
@@ -549,10 +549,15 @@ def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frame
         grouping = ['plate','well','tile','tracked_cell']
         framing = lambda df: df['frame'].values
         bounding = lambda df: [[b] for _,b in df['bounds'].items()]
+        if offset_frames is not None:
+            offsetting = lambda df: offset_frames - df.query('frame_type=="pre"').pipe(len)
+        else:
+            offsetting = lambda df: 0
     else:
         grouping = ['plate','well','tile','track_id']
         framing = lambda df: sorted(df['frame'].unique())
         bounding = lambda df: [df_f['bounds'].tolist() for _,df_f in df.groupby('frame')]
+        offsetting = lambda df: 0
 
 
     if tqdm:
@@ -566,14 +571,16 @@ def timelapse_montage_guide(df_guide, cell_width=60, montage_width=25, max_frame
                                     frames=framing(df_track),
                                     max_frames=max_frames,
                                     bounds=bounding(df_track),
+                                    frame_offset=offsetting(df_track),
                                     cast_ubyte=cast_ubyte
                                    )
                   )
     piled = ops.utils.pile(arr)
     return ops.utils.montage(piled,shape=(-1,montage_width))
 
-def timelapse_montage_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA',max_frames=None, 
-    montage_style='aligned', file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf',
+def timelapse_montage_gene(df_gene, cell_width=40, montage_width=25, groupby='sgRNA', max_frames=None, 
+    montage_style='aligned', offset_frames=None, 
+    file_pattern='{plate}/process_ph/images/20X_{well}_mCherry_Tile-{tile}.aligned.hdf',
     tqdm=False, cast_ubyte=True):
     arr = []
     if max_frames is None:
@@ -585,6 +592,7 @@ def timelapse_montage_gene(df_gene,cell_width=40,montage_width=25,groupby='sgRNA
                                                 montage_width=montage_width,
                                                 max_frames=max_frames,
                                                 montage_style=montage_style,
+                                                offset_frames=offset_frames,
                                                 file_pattern=file_pattern,
                                                 tqdm=tqdm,
                                                 cast_ubyte=cast_ubyte
