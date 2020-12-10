@@ -13,7 +13,7 @@
 
 import numpy as np
 from scipy.stats import median_absolute_deviation, rankdata # new in version 1.3.0
-from scipy.spatial.distance import cdist
+from scipy.spatial.distance import pdist
 from scipy.ndimage.morphology import distance_transform_edt as distance_transform
 from scipy.ndimage import map_coordinates
 from mahotas.features import haralick, pftas#, zernike_moments
@@ -316,7 +316,7 @@ shape_features = {
     'orientation' : lambda r: r.orientation,
     'compactness' : lambda r: 2*np.pi*(r.moments_central[0,2]+r.moments_central[2,0])/(r.area**2),
     'radius' : lambda r: max_median_mean_radius(r.filled_image),
-    'feret_diameter' : lambda r: min_max_feret_diameter(r.coords), # relatively expensive, likely high correlation with major/minor axis
+    'feret_diameter' : lambda r: min_max_feret_diameter(r.coords), # relatively expensive, likely high correlation with major/minor axis; looks like max feret will be added to skimage regionprops, but not yet
     'hu_moments': lambda r: r.moments_hu,
     # zernike okay to remove if computation is limiting -- not many of these were retained in Rohban 2017 eLife and they are very (most) expensive
     # cp/centrosome zernike divides zernike magnitudes by minimum enclosing circle magnitude; unclear why
@@ -784,37 +784,21 @@ def min_max_feret_diameter(coords):
 
 	antipodes = get_antipodes(hull_vertices)
 
-	point_distances = np.array(list(starmap(cdist,zip(np.stack([antipodes[:,:2],antipodes[:,2:4]]),np.array([antipodes[:,4:6],]*2)))))
+	point_distances = pdist(hull_vertices)
 
 	try:
-		argmin,argmax = (antipodes[:,6].argmin(),np.unravel_index(point_distances.argmax(),point_distances.shape))
+		argmin,argmax = (antipodes[:,6].argmin(),point_distances.argmax())
 		# min feret diameter, max feret diameter, min feret r0,c0,r1,c1 , max feret r0,c0,r1,c1
 		results = ((antipodes[argmin,6],point_distances[argmax])
 			+(np.mean([antipodes[argmin,0],antipodes[argmin,2]]),np.mean([antipodes[argmin,1],antipodes[argmin,3]]))
 			+tuple(antipodes[argmin,4:6])
-			+tuple(antipodes[argmax[1],2*argmax[0]:(2*argmax[0])+2])
-			+tuple(antipodes[argmax[2],4:6])
 			)
+		for v in tuple(combinations(hull_vertices,r=2))[argmax]:
+			results+=tuple(v)
 	except:
 		results = (np.nan,)*10
 
 	return results
-
-# def minimum_feret_diameter(coords):
-# 	hull_vertices = coords[ConvexHull(coords).vertices]
-
-# 	distances = get_antipodes(hull_vertices)[:,6]
-
-# 	return distances.min()
-
-# def maximum_feret_diameter(coords):
-# 	hull_vertices = coords[ConvexHull(coords).vertices]
-
-# 	antipodes = get_antipodes(hull_vertices)[:,:6]
-
-# 	distances = np.array(list(starmap(cdist,zip(np.stack([antipodes[:,:2],antipodes[:,2:4]]),antipodes[None,:,4:6]))))
-
-# 	return distances.max()
 
 def get_antipodes(vertices):
     """rotating calipers"""
@@ -863,65 +847,6 @@ def perpendicular_distance(line_p0,line_p1,p0):
     else:
         return abs(((line_p1[1]-line_p0[1])*(line_p0[0]-p0[0])-(line_p1[0]-line_p0[0])*(line_p0[1]-p0[1]))/
                 np.sqrt((line_p1[1]-line_p0[1])**2+(line_p1[0]-line_p0[0])**2))
-
-# class FeretHull(ConvexHull):
-# 	"""Subclass of scipy.spatial.ConvexHull,
-# 	adds Feret Diamter functionality
-# 	"""
-# 	def __init__(self,points,incremental=False,qhull_options=None):
-# 		import pandas as pd
-
-# 		super().__init__(points,incremental,qhull_options) # inherit ConvexHull methods
-
-# 		def perpendicular_distance(line_p0,line_p1,p0):
-# 		    if line_p0[0]==line_p1[0]:
-# 		        return abs(line_p0[0]-p0[0])
-# 		    elif line_p0[1]==line_p1[1]:
-# 		        return abs(line_p0[1]-p0[1])
-# 		    else:
-# 		        return abs(((line_p1[1]-line_p0[1])*(line_p0[0]-p0[0])-(line_p1[0]-line_p0[0])*(line_p0[1]-p0[1]))/
-# 		                np.sqrt((line_p1[1]-line_p0[1])**2+(line_p1[0]-line_p0[0])**2))
-
-# 		def get_antipodes_dataframe(vertices):
-# 		    """rotating calipers"""
-# 		    antipodes = []
-# 		    # iterate through each vertex
-# 		    for v_index,vertex in enumerate(vertices):
-# 		        current_distance = 0
-# 		        candidates = vertices[circular_index(v_index+1,v_index-2,len(vertices))]
-
-# 		        # iterate through each vertex except current and previous
-# 		        for c_index,candidate in enumerate(candidates):
-
-# 		            #calculate perpendicular distance from candidate_antipode to line formed by current and previous vertex
-# 		            d = perpendicular_distance(vertex,vertices[v_index-1],candidate)
-		            
-# 		            if d < current_distance:
-# 		                # previous candidate is a "breaking" antipode
-# 		                antipodes.append({'line_vertex_0':vertex,'line_vertex_1':vertices[v_index-1],'point_vertex':candidates[c_index-1],'distance':current_distance})
-# 		                break
-		                
-# 		            elif d >= current_distance:
-# 		                # not a breaking antipode
-# 		                if d == current_distance:
-# 		                    # previous candidate is a "non-breaking" antipode
-# 		                    antipodes.append({'line_vertex_0':vertex,'line_vertex_1':vertices[v_index-1],'point_vertex':candidates[c_index-1],'distance':current_distance})
-# 		                    if c_index == len(candidates)-1:
-# 		                        antipodes.append({'line_vertex_0':vertex,'line_vertex_1':vertices[v_index-1],'point_vertex':candidates[c_index],'distance':current_distance})
-# 		                current_distance = d
-
-# 		    return antipodes
-
-# 		self.antipodes = pd.DataFrame(get_antipodes_dataframe(points[self.vertices]))
-		
-# 	def get_min_feret(self):
-# 		# distance between antipode point and each line formed by other antipode point and adjacent vertices
-# 		return self.antipodes['distance'].values.min()
-
-# 	def get_max_feret(self):
-# 		# distance between antipode points
-# 		return np.array([cdist([antipode.line_vertex_0,antipode.line_vertex_1],[antipode.point_vertex]).max() 
-# 			for _,antipode in self.antipodes.iterrows()]).max()
 
 def zernike_minimum_enclosing_circle(coords,degree=9):
 	image, center, diameter = minimum_enclosing_circle_shift(coords)
