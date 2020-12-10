@@ -335,7 +335,16 @@ shape_columns.update({
 	'radius_1':'median_radius',
 	'radius_2':'mean_radius',
 	'feret_diameter_0':'min_feret_diameter',
-	'feret_diameter_1':'max_feret_diameter'
+	'feret_diameter_1':'max_feret_diameter',
+	# these are really for plotting purposes
+	'feret_diameter_2':'min_feret_r0',
+	'feret_diameter_3':'min_feret_c0',
+	'feret_diameter_4':'min_feret_r1',
+	'feret_diameter_5':'min_feret_c1',
+	'feret_diameter_6':'max_feret_r0',
+	'feret_diameter_7':'max_feret_c0',
+	'feret_diameter_8':'max_feret_r1',
+	'feret_diameter_9':'max_feret_c1'
 })
 
 # # MeasureTexture:'Measure the texture features in all objects, against all 5 channels, using multiple spatial scales.'
@@ -775,12 +784,19 @@ def min_max_feret_diameter(coords):
 
 	antipodes = get_antipodes(hull_vertices)
 
-	point_distances = np.array(list(starmap(cdist,zip(np.stack([antipodes[:,:2],antipodes[:,2:4]]),antipodes[None,:,4:6]))))
+	point_distances = np.array(list(starmap(cdist,zip(np.stack([antipodes[:,:2],antipodes[:,2:4]]),np.array([antipodes[:,4:6],]*2)))))
 
 	try:
-		results = antipodes[:,6].min(),point_distances.max()
+		argmin,argmax = (antipodes[:,6].argmin(),np.unravel_index(point_distances.argmax(),point_distances.shape))
+		# min feret diameter, max feret diameter, min feret r0,c0,r1,c1 , max feret r0,c0,r1,c1
+		results = ((antipodes[argmin,6],point_distances[argmax])
+			+(np.mean([antipodes[argmin,0],antipodes[argmin,2]]),np.mean([antipodes[argmin,1],antipodes[argmin,3]]))
+			+tuple(antipodes[argmin,4:6])
+			+tuple(antipodes[argmax[1],2*argmax[0]:(2*argmax[0])+2])
+			+tuple(antipodes[argmax[2],4:6])
+			)
 	except:
-		results = np.nan,np.nan
+		results = (np.nan,)*10
 
 	return results
 
