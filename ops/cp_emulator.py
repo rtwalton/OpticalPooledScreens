@@ -304,6 +304,7 @@ intensity_distribution_columns = {
 shape_features = {
 	'area'    : lambda r: r.area,
 	'perimeter' : lambda r: r.perimeter,
+	'convex_area' : lambda r: r.convex_area,
 	'form_factor': lambda r:4*np.pi*r.area/(r.perimeter)**2, #isoperimetric quotient
 	'solidity': lambda r: r.solidity,
 	'extent': lambda r: r.extent,
@@ -315,7 +316,7 @@ shape_features = {
     'orientation' : lambda r: r.orientation,
     'compactness' : lambda r: 2*np.pi*(r.moments_central[0,2]+r.moments_central[2,0])/(r.area**2),
     'radius' : lambda r: max_median_mean_radius(r.filled_image),
-    # 'feret_diameter' : lambda r: min_max_feret_diameter(r.coords), # relatively expensive, likely high correlation with major/minor axis
+    'feret_diameter' : lambda r: min_max_feret_diameter(r.coords), # relatively expensive, likely high correlation with major/minor axis
     'hu_moments': lambda r: r.moments_hu,
     # zernike okay to remove if computation is limiting -- not many of these were retained in Rohban 2017 eLife and they are very (most) expensive
     # cp/centrosome zernike divides zernike magnitudes by minimum enclosing circle magnitude; unclear why
@@ -333,8 +334,8 @@ shape_columns.update({
 	'radius_0':'max_radius',
 	'radius_1':'median_radius',
 	'radius_2':'mean_radius',
-	# 'feret_diameter_0':'min_feret_diameter',
-	# 'feret_diameter_1':'max_feret_diameter',
+	'feret_diameter_0':'min_feret_diameter',
+	'feret_diameter_1':'max_feret_diameter'
 })
 
 # # MeasureTexture:'Measure the texture features in all objects, against all 5 channels, using multiple spatial scales.'
