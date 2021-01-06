@@ -61,10 +61,10 @@ def get_simple_stats(df_stats):
 
 ## BOOTSTRAPPING
 
-def bootstrap_cells(df, col, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
-    vals = df[col].values
+def bootstrap_cells(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
+    vals = s.values
     def bootstrap(vals, n_cells,statistic):
-        return statistic(choices(vals,k=n_cells))
+        return statistic(choices(vals,k=n_cells,cum_weights=None))
 
     if tqdm:
         reps = tqdm_auto(range(n_reps))
@@ -76,8 +76,8 @@ def bootstrap_cells(df, col, n_cells=100, n_reps=10000, statistic=np.mean, n_job
 
     return np.array(bootstrapped)
 
-def bootstrap_within_guides(df, col, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
-    guide_values = {k:g.values for k,g in df.groupby('sgRNA')[col]}
+def bootstrap_within_guides(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
+    guide_values = {k:g.values for k,g in s.groupby('sgRNA')}
     guides = list(guide_values)
 
     if tqdm:
@@ -85,26 +85,26 @@ def bootstrap_within_guides(df, col, n_cells=100, n_reps=10000, statistic=np.mea
     else:
         reps = range(n_reps)
 
-    def bootstrap(guide_values,guides,col,n_cells,statistic):
+    def bootstrap(guide_values,guides,n_cells,statistic):
         rep_guide = choice(guides)
         return statistic(choices(guide_values[rep_guide], k=n_cells, cum_weights=None))
     
-    bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(guide_values,guides,col,n_cells,statistic) 
+    bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(guide_values,guides,n_cells,statistic) 
                                            for _ in reps)
 
     return np.array(bootstrapped)
 
-def bootstrap_guide_pval(df_nt, df_targeting, col, n_reps=10000, statistic=np.mean, bootstrap_nt_within_guides=True, 
+def bootstrap_guide_pval(s_nt, s_targeting, n_reps=10000, statistic=np.mean, bootstrap_nt_within_guides=True, 
     tails='two', n_jobs=-1, tqdm=False):
-    n_cells = df_targeting.pipe(len)
-    measured = statistic(df_targeting[col])
+    n_cells = s_targeting.pipe(len)
+    measured = statistic(s_targeting)
 
     if bootstrap_nt_within_guides:
         bootstrap = bootstrap_within_guides
     else:
         bootstrap = bootstrap_cells
 
-    bootstrapped_nt = bootstrap(df_nt, col, n_cells, n_reps=n_reps, statistic=statistic, n_jobs=n_jobs, tqdm=tqdm)
+    bootstrapped_nt = bootstrap(s_nt, n_cells, n_reps=n_reps, statistic=statistic, n_jobs=n_jobs, tqdm=tqdm)
     
     if tails=='two':
         return max(min((bootstrapped_nt>measured).mean(),(bootstrapped_nt<measured).mean()),1/n_reps)*2
