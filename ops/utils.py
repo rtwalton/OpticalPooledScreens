@@ -141,6 +141,44 @@ def groupby_reduce_concat(gb, *args, **kwargs):
 
     return pd.concat(arr, axis=1).reset_index()
 
+def groupby_reduce_concat_dask(gb, *args, meta=None, **kwargs):
+    """
+    df = groupby_reduce_concat_dask((ddf_cells
+          .groupby(['stimulant', 'gene'])
+          ['gate_NT']),
+          fraction_gate_NT='mean', 
+          cell_count='size')
+          )
+    """
+    if meta==None:
+        meta = {red:float for red in list(kwargs)}
+
+    for arg in args:
+        kwargs[arg] = arg
+
+    reductions = {'mean': lambda x: x.mean(),
+                  'min': lambda x: x.min(),
+                  'max': lambda x: x.max(),
+                  # 'median': lambda x: x.median(),
+                  'std': lambda x: x.std(),
+                  # 'sem': lambda x: x.sem(),
+                  'size': lambda x: x.size(),
+                  'count': lambda x: x.size(),
+                  'sum': lambda x: x.sum(),
+                  'sum_int': lambda x: x.sum().astype(int),
+                  # 'first': lambda x: x.nth(0),
+                  # 'second': lambda x: x.nth(1)
+                  }
+
+    arr = []
+    for name, f in kwargs.items():
+        if callable(f):
+            arr += [gb.apply(f,meta=meta[name]).compute().rename(name)]
+        else:
+            arr += [reductions[f](gb).compute().rename(name)]
+
+    return pd.concat(arr, axis=1).reset_index()
+
 
 def groupby_histogram(df, index, column, bins, cumulative=False, normalize=False):
     """Substitute for df.groupby(index)[column].value_counts(),

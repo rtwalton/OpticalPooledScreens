@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from random import choice,choices
 
 from ops.constants import *
 from ops.utils import groupby_histogram, groupby_reduce_concat
@@ -7,6 +8,8 @@ from scipy.stats import wasserstein_distance, ks_2samp, ttest_ind, kstest
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm.auto import tqdm as tqdm_auto
+from joblib import Parallel,delayed
 
 def distribution_difference(df,col='dapi_gfp_corr',control_query='gene_symbol == "non-targeting"', groups='gene_symbol'):
     y_neg = (df
@@ -55,6 +58,62 @@ def get_simple_stats(df_stats):
      .assign(IL1b_rank=lambda x: x['IL1b'].rank().astype(int))
      .assign(TNFa_rank=lambda x: x['TNFa'].rank().astype(int))
     )
+
+## BOOTSTRAPPING
+
+def bootstrap_cells(df, col, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
+    vals = df[col].values
+    def bootstrap(vals, n_cells,statistic):
+        return statistic(choices(vals,k=n_cells))
+
+    if tqdm:
+        reps = tqdm_auto(range(n_reps))
+    else:
+        reps = range(n_reps)
+    
+    bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(vals, n_cells, statistic) 
+                                           for _ in reps)
+
+    return np.array(bootstrapped)
+
+def bootstrap_within_guides(df, col, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
+    guide_values = {k:g.values for k,g in df.groupby('sgRNA')[col]}
+    guides = list(guide_values)
+
+    if tqdm:
+        reps = tqdm_auto(range(n_reps))
+    else:
+        reps = range(n_reps)
+
+    def bootstrap(guide_values,guides,col,n_cells,statistic):
+        rep_guide = choice(guides)
+        return statistic(choices(guide_values[rep_guide], k=n_cells, cum_weights=None))
+    
+    bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(guide_values,guides,col,n_cells,statistic) 
+                                           for _ in reps)
+
+    return np.array(bootstrapped)
+
+def bootstrap_guide_pval(df_nt, df_targeting, col, n_reps=10000, statistic=np.mean, bootstrap_nt_within_guides=True, 
+    tails='two', n_jobs=-1, tqdm=False):
+    n_cells = df_targeting.pipe(len)
+    measured = statistic(df_targeting[col])
+
+    if bootstrap_nt_within_guides:
+        bootstrap = bootstrap_within_guides
+    else:
+        bootstrap = bootstrap_cells
+
+    bootstrapped_nt = bootstrap(df_nt, col, n_cells, n_reps=n_reps, statistic=statistic, n_jobs=n_jobs, tqdm=tqdm)
+    
+    if tails=='two':
+        return max(min((bootstrapped_nt>measured).mean(),(bootstrapped_nt<measured).mean()),1/n_reps)*2
+    elif tails=='one':
+        return (bootstrapped_nt>measured).mean(), (bootstrapped_nt<measured).mean()
+    else:
+        raise ValueError(f'tails=={tails} not implemented')
+
+## PLOTTING
 
 def plot_distributions(df_cells, gene, col='dapi_gfp_corr_nuclear',
     control_query='gene_symbol=="nt"', replicate_col='replicate', conditions_col='stimulant',
