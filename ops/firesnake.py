@@ -43,16 +43,54 @@ class Snake():
 
     @staticmethod
     def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1, q_norm=70,
-        align_within_cycle=True, cycle_files=None, keep_trailing=False, n=1, remove_for_cycle_alignment=None):
+        align_within_cycle=True, cycle_files=None, keep_extras=False, n=1, remove_for_cycle_alignment=None):
         """Rigid alignment of sequencing cycles and channels. 
+        
+        Parameters
+        ----------
+        data : np.ndarray or list of np.ndarrays
+            Unaligned SBS image with dimensions (CYCLE, CHANNEL, I, J) or list of single cycle
+            SBS images, each with dimensions (CHANNEL, I, J)
 
-        Expects `data` to be an array with dimensions (CYCLE, CHANNEL, I, J). 'n' 
-        determines the first SBS channel in 'data'.
-        A centered subset of data is used if `window` is greater 
-        than one. Subpixel alignment is done if `upsample_factor` is greater than
-        one (can be slow).
+        method : {'DAPI','SBS_mean'}
+
+        upsample_factor : int, default 2
+            Subpixel alignment is done if `upsample_factor` is greater than one (can be slow).
+        
+        window : int or float, default 2
+            A centered subset of data is used if `window` is greater than one.
+
+        cutoff : int or float, default 1
+            Cutoff for normalized data to help deal with noise in images.
+
+        q_norm : int, default 70
+            Quantile for normalization to help deal with noise in images.
+
+        align_within_cycle : bool
+            Align sbs channels within cycles.
+
+        cycle_files : list of int or None, default None
+            Used for parsing sets of images where individual channels are in separate files, which
+            is more typically handled in a preprocessing step to combine images from the same cycle
+
+        keep_extras : bool, default False
+            Retain channels that are not common across all cycles by propagating each 'extra' channel 
+            to all cycles. Ignored if same number of channels exist for all cycles.
+
+        n : int, default 1
+            Determines the first SBS channel in `data`. This is after dealing with `keep_extras`, so 
+            should only account for channels in common across all cycles if `keep_extras`=False.
+        
+        remove_for_cycle_alignment : None or int, default int
+            Channel index to remove when finding cycle offsets. This is after dealing with `keep_extras`, 
+            so should only account for channels in common across all cycles if `keep_extras`=False.
+
+        Returns
+        -------
+        aligned : np.ndarray
+            SBS image aligned across cycles.
         """
-        # print(data.shape)
+
         if cycle_files is not None:
             arr = []
             # snakemake passes de-nested list of numpy arrays
@@ -68,36 +106,26 @@ class Snake():
         else:
             data = np.array(data)
 
-        if keep_trailing != False | data.ndim==1:
+        # if number of channels varies across cycles
+        if data.ndim==1:
+            # start by only keeping channels in common
             channels = [len(x) for x in data]
             stacked = np.array([x[-min(channels):] for x in data])
+
+            # add back in extra channels if requested
+            if keep_extras==True:
+                extras = np.array(channels)-min(channels)
+                arr = []
+                for cycle,extra in enumerate(extras):
+                    if extra != 0:
+                        arr.extend([data[cycle][extra_ch] for extra_ch in range(extra)])
+                propagate = np.array(arr)
+                stacked = np.concatenate((np.array([propagate]*stacked.shape[0]),stacked),axis=1)
+            else:
+                extras = [0,]*stacked.shape[0]
         else:
             stacked = data
-
-        if keep_trailing == 'propagate_extras':
-            extras = np.array(channels)-min(channels)
-            arr = []
-            for cycle,extra in enumerate(extras):
-                if extra != 0:
-                    arr.extend([data[cycle][extra_ch] for extra_ch in range(extra)])
-            propagate = np.array(arr)
-            stacked = np.concatenate((np.array([propagate]*stacked.shape[0]),stacked),axis=1)
-        else:
             extras = [0,]*stacked.shape[0]
-
-        # if data.ndim==1:
-        #     # data stacked with different cycle numbers?
-        #     # assume extra channels exist are on the first cycle, first channels
-        #     # does not return extra channels
-        #     channels = [len(x) for x in data]
-        #     extra = max(channels) - min(channels)
-        #     #stack channels in common
-        #     stacked = np.array([data[0][extra:]]+[data[cycle] for cycle in range(1,data.shape[0])])
-        #     #copy extra channels across other cycles
-        #     stacked = np.concatenate((np.array([data[0][:extra]]*stacked.shape[0]),stacked),axis=1)
-        # else:
-        #     extra = 0
-        #     stacked = data
 
         assert stacked.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
 
@@ -108,7 +136,6 @@ class Snake():
             
             aligned[:, n:] = np.array([align_it(x) for x in aligned[:, n:]])
             
-
         if method == 'DAPI':
             # align cycles using the DAPI channel
             aligned = Align.align_between_cycles(aligned, channel_index=0, 
@@ -118,7 +145,6 @@ class Snake():
             sbs_channels = list(range(n,aligned.shape[1]))
             if remove_for_cycle_alignment != None:
                 sbs_channels.remove(remove_for_cycle_alignment)
-
             target = Align.apply_window(aligned[:, sbs_channels], window=window).max(axis=1)
             normed = Align.normalize_by_percentile(target, q_norm=q_norm)
             normed[normed > cutoff] = cutoff
@@ -129,9 +155,11 @@ class Snake():
                     aligned[:, channel] = Align.apply_offsets(aligned[:, channel], offsets)
                 else:
                     # don't apply offsets to extra channel in the cycle it was acquired
-                    offset_cycles = list(range(aligned.shape[0])).remove(list(np.cumsum(extras)>channel).index(True))
-                    aligned[offset_cycles, channel] = Align.apply_offsets(aligned[offset_cycles, channel], offsets)
-
+                    extra_idx = list(np.cumsum(extras)>channel).index(True)
+                    extra_offsets = np.array([offsets[extra_idx],]*aligned.shape[0])
+                    aligned[:,channel] = Align.apply_offsets(aligned[:,channel],extra_offsets)
+        else:
+            raise ValueError(f'method "{method}" not implemented')
         return aligned
 
     @staticmethod
