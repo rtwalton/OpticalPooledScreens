@@ -151,7 +151,7 @@ def groupby_reduce_concat_dask(gb, *args, meta=None, **kwargs):
           )
     """
     if meta==None:
-        meta = {red:float for red in list(kwargs)}
+        meta = {kw:float for kw in list(kwargs)}
 
     for arg in args:
         kwargs[arg] = arg

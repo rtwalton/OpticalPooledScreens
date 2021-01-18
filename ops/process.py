@@ -4,6 +4,8 @@ from collections.abc import Iterable
 from itertools import product
 
 import skimage
+import skimage.registration
+import skimage.segmentation
 import skimage.feature
 import skimage.filters
 import numpy as np
@@ -79,7 +81,10 @@ def find_cells(nuclei, mask, remove_boundary_cells=True):
     Expands labeled nuclei to cells, constrained to where mask is >0.
     """
     distance = ndimage.distance_transform_cdt(nuclei == 0)
-    cells = skimage.morphology.watershed(distance, nuclei, mask=mask)
+    try:
+        cells = skimage.segmentation.watershed(distance, nuclei, mask=mask)
+    except:
+        cells = skimage.morphology.watershed(distance, nuclei, mask=mask)
     # remove cells touching the boundary
     if remove_boundary_cells:
         cut = np.concatenate([cells[0,:], cells[-1,:], 
@@ -235,8 +240,12 @@ class Align:
             if i == 0:
                 offsets += [(0, 0)]
             else:
-                offset, _, _ = skimage.feature.register_translation(
-                                src, target, upsample_factor=upsample_factor)
+                try:
+                    offset, _, _ = skimage.registration.phase_cross_correlation(
+                                    src, target, upsample_factor=upsample_factor)
+                except: 
+                    offset, _, _ = skimage.feature.register_translation(
+                                    src, target, upsample_factor=upsample_factor)
                 offsets += [offset]
         return np.array(offsets)
 
@@ -414,7 +423,10 @@ def apply_watershed(img, smooth=4):
                     exclude_border=False)
 
     markers = ndimage.label(local_max)[0]
-    result = skimage.morphology.watershed(-distance, markers, mask=img)
+    try:
+        result = skimage.segmentation.watershed(-distance, markers, mask=img)
+    except:
+        result = skimage.morphology.watershed(-distance, markers, mask=img)
     return result.astype(np.uint16)
 
 
