@@ -175,6 +175,55 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
 
     return smoothed
 
+def rolling_ball_background_skimage(image, radius=100, ball=None, shrink_factor=None, **kwargs):
+    # from skimage.restoration import ball_kernel, rolling_ball
+    if ball is None:
+        ball = skimage.restoration.ball_kernel(radius,ndim=2)
+
+    if shrink_factor is None:
+        # Copied from ImageJ "Subtract Background" command.
+        if radius <= 10:
+            shrink_factor = 1
+            trim = 0.12 #; // trim 24% in x and y
+        elif radius <= 30:
+            shrink_factor = 2
+            trim = 0.12 #; // trim 24% in x and y
+        elif radius <= 100:
+            shrink_factor = 4
+            trim = 0.16 #; // trim 32% in x and y
+        else:
+            shrink_factor = 8
+            trim = 0.20 #; // trim 40% in x and y
+
+        n = int(ball.shape[0] * trim)
+        i0, i1 = n, ball.shape[0] - n
+        ball = ball[i0:i1, i0:i1]
+    
+    image_ = skimage.transform.rescale(image, 1./shrink_factor, 
+                   preserve_range=True).astype(image.dtype)
+
+    kernel = skimage.transform.rescale(ball, 1./shrink_factor, 
+           preserve_range=True).astype(ball.dtype)
+
+    background = skimage.restoration.rolling_ball(image_,kernel=kernel,**kwargs)
+
+    background = skimage.transform.resize(background,image.shape,
+        preserve_range=True).astype(image.dtype)
+
+    return background
+
+def subtract_background(image, radius, ball=None, shrink_factor=None, smooth=100, *kwargs):
+    background = rolling_ball_background_skimage(image,radius=radius,ball=ball,
+        shrink_factor=shrink_factor,**kwargs)
+
+    if smooth is not None:
+        background = skimage.filters.gaussian(background,sigma=smooth,preserve_range=True)
+
+    mask = background>image
+    background[mask] = image[mask]
+    return image-background
+
+
 @ops.utils.applyIJ
 def log_ndi(data, sigma=1, *args, **kwargs):
     """Apply laplacian of gaussian to each image in a stack of shape
