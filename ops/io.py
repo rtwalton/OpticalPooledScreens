@@ -229,7 +229,7 @@ def grid_view(files, bounds, padding=40, with_mask=False,im_func=None,memoize=Tr
 
 
 @ops.utils.memoize(active=False)
-def read_stack(filename, copy=True, maxworkers=None):
+def read_stack(filename, copy=True, maxworkers=None, fix_axes=False):
     """Read a .tif file into a numpy array, with optional memory mapping.
     `maxworkers` determines the number of threads used for decompression of compressed tiffs.
     """
@@ -240,6 +240,13 @@ def read_stack(filename, copy=True, maxworkers=None):
 
     if copy:
         data = data.copy()
+
+    if fix_axes:
+        # can fix incorrect axis orders from some files, in particular micromanager generated images with 4 dimensions.
+        if data.ndim != 4:
+            raise ValueError('`fix_axes` only tested for data with 4 dimensions')
+        data = np.array([data.reshape((-1,)+data.shape[-2:])[n::data.shape[-4]] for n in range(data.shape[-4])])
+
     return data
 
 @ops.utils.memoize(active=False)
