@@ -175,7 +175,8 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
 
     return smoothed
 
-def rolling_ball_background_skimage(image, radius=100, ball=None, shrink_factor=None, **kwargs):
+@ops.utils.applyIJ
+def rolling_ball_background_skimage(image, radius=100, ball=None, shrink_factor=None, smooth=None, **kwargs):
     # from skimage.restoration import ball_kernel, rolling_ball
     if ball is None:
         ball = skimage.restoration.ball_kernel(radius,ndim=2)
@@ -207,17 +208,17 @@ def rolling_ball_background_skimage(image, radius=100, ball=None, shrink_factor=
 
     background = skimage.restoration.rolling_ball(image_,kernel=kernel,**kwargs)
 
+    if smooth is not None:
+        background = skimage.filters.gaussian(background,sigma=smooth/shrink_factor,preserve_range=True)
+
     background = skimage.transform.resize(background,image.shape,
         preserve_range=True).astype(image.dtype)
 
     return background
 
-def subtract_background(image, radius, ball=None, shrink_factor=None, smooth=100, *kwargs):
+def subtract_background(image, radius=100, ball=None, shrink_factor=None, smooth=None, **kwargs):
     background = rolling_ball_background_skimage(image,radius=radius,ball=ball,
-        shrink_factor=shrink_factor,**kwargs)
-
-    if smooth is not None:
-        background = skimage.filters.gaussian(background,sigma=smooth,preserve_range=True)
+        shrink_factor=shrink_factor, smooth=smooth, **kwargs)
 
     mask = background>image
     background[mask] = image[mask]
