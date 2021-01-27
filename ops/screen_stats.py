@@ -113,6 +113,17 @@ def bootstrap_guide_pval(s_nt, s_targeting, n_reps=10000, statistic=np.mean, boo
     else:
         raise ValueError(f'tails=={tails} not implemented')
 
+def bootstrap_gene_pval(s_targeting_guide_scores,guide_null_distributions,gene_statistic=np.median,n_reps=10000):
+    """`guide_null_distributions` is of shape (n_guides,n_reps_guide_bootstrapping), e.g., a different null
+    distribution for each guide based on its sample size"""
+    measured = gene_statistic(s_targeting_guide_scores)
+    guides = len(s_targeting_guide_scores)
+    
+    samples = np.random.randint(guide_null_distributions.shape[1],size=(guides,n_reps))
+    gene_null = gene_statistic(guide_null_distributions[np.array([n for n in range(guides)]).reshape(-1,1),samples],axis=0)
+    
+    return max(min((gene_null>measured).mean(),(gene_null<measured).mean()),1/n_reps)*2
+
 ## PLOTTING
 
 def plot_distributions(df_cells, gene, col='dapi_gfp_corr_nuclear',
