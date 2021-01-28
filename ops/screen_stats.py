@@ -61,22 +61,27 @@ def get_simple_stats(df_stats):
 
 ## BOOTSTRAPPING
 
-def bootstrap_cells(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
+def bootstrap_cells(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=1, tqdm=False):
+    rng = np.random.default_rng()
     vals = s.values
     def bootstrap(vals, n_cells,statistic):
-        return statistic(choices(vals,k=n_cells,cum_weights=None))
+        return statistic(vals[rng.integers(len(vals),size=n_cells)])
 
     if tqdm:
         reps = tqdm_auto(range(n_reps))
     else:
         reps = range(n_reps)
     
-    bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(vals, n_cells, statistic) 
-                                           for _ in reps)
+    if n_job!=1:
+        bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(vals, n_cells, statistic) 
+                                               for _ in reps)
+    else:
+        bootstrapped = [bootstrap(vals, n_cells, statistic) for _ in reps]
 
     return np.array(bootstrapped)
 
-def bootstrap_within_guides(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=-1, tqdm=False):
+def bootstrap_within_guides(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=1, tqdm=False):
+    rng = np.random.default_rng()
     guide_values = {k:g.values for k,g in s.groupby('sgRNA')}
     guides = list(guide_values)
 
@@ -86,11 +91,15 @@ def bootstrap_within_guides(s, n_cells=100, n_reps=10000, statistic=np.mean, n_j
         reps = range(n_reps)
 
     def bootstrap(guide_values,guides,n_cells,statistic):
-        rep_guide = choice(guides)
-        return statistic(choices(guide_values[rep_guide], k=n_cells, cum_weights=None))
+        rep_guide = rng.choice(guides)
+        vals = guide_values[rep_guide]
+        return statistic(vals[rng.integers(len(vals), size=n_cells)])
     
-    bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(guide_values,guides,n_cells,statistic) 
-                                           for _ in reps)
+    if n_jobs!=1:
+        bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(guide_values,guides,n_cells,statistic) 
+                                               for _ in reps)
+    else:
+        bootstrapped = [bootstrap(guide_values,guides,n_cells,statistic) for _ in reps]
 
     return np.array(bootstrapped)
 
@@ -109,20 +118,25 @@ def bootstrap_guide_pval(s_nt, s_targeting, n_reps=10000, statistic=np.mean, boo
     if tails=='two':
         return max(min((bootstrapped_nt>measured).mean(),(bootstrapped_nt<measured).mean()),1/n_reps)*2
     elif tails=='one':
-        return (bootstrapped_nt>measured).mean(), (bootstrapped_nt<measured).mean()
+        return min((bootstrapped_nt>measured).mean(), (bootstrapped_nt<measured).mean())
     else:
         raise ValueError(f'tails=={tails} not implemented')
 
-def bootstrap_gene_pval(s_targeting_guide_scores,guide_null_distributions,gene_statistic=np.median,n_reps=10000):
+def bootstrap_gene_pval(s_targeting_guide_scores, guide_null_distributions, gene_statistic=np.median,
+    n_reps=10000, tails='two'):
     """`guide_null_distributions` is of shape (n_guides,n_reps_guide_bootstrapping), e.g., a different null
     distribution for each guide based on its sample size"""
+    rng = np.random.default_rng()
     measured = gene_statistic(s_targeting_guide_scores)
-    guides = len(s_targeting_guide_scores)
     
-    samples = np.random.randint(guide_null_distributions.shape[1],size=(guides,n_reps))
-    gene_null = gene_statistic(guide_null_distributions[np.array([n for n in range(guides)]).reshape(-1,1),samples],axis=0)
+    gene_null = gene_statistic(rng.choice(guide_null_distributions,size=n_reps,replace=True,axis=1),axis=0)
     
-    return max(min((gene_null>measured).mean(),(gene_null<measured).mean()),1/n_reps)*2
+    if tails=='two':
+        return max(min((gene_null>measured).mean(),(gene_null<measured).mean()),1/n_reps)*2
+    elif tails=='one':
+        return min((gene_null>measured).mean(),(gene_null<measured).mean())
+    else:
+        raise ValueError(f'tails=={tails} not implemented')
 
 ## PLOTTING
 
