@@ -387,7 +387,6 @@ def find_foci(data, radius=3, threshold=10, remove_border_foci=False):
 
     return labeled
 
-def binarize(image, radius, min_size,method='mean',percentile=0.5,equalize=False,filter=True):
 def remove_border(labels, mask, dilate=5):
     mask = skimage.morphology.binary_dilation(mask,np.ones((dilate,dilate)))
     remove = np.unique(labels[mask])
@@ -428,6 +427,7 @@ def remove_border(labels, mask, dilate=5):
 
 #     return background
 
+def binarize(image, radius, min_size,method='mean',percentile=0.5):
     """Apply local mean threshold to find outlines. Filter out
     background shapes. Otsu threshold on list of region mean intensities will remove a few
     dark cells. Could use shape to improve the filtering.
@@ -435,8 +435,6 @@ def remove_border(labels, mask, dilate=5):
     # slower than optimized disk in ImageJ
     # scipy.ndimage.uniform_filter with square is fast but crappy
     selem = skimage.morphology.disk(radius)
-    if equalize:
-        image = skimage.filters.rank.equalize(image,selem=selem)
     
     dapi = skimage.img_as_ubyte(image)
 
@@ -444,10 +442,10 @@ def remove_border(labels, mask, dilate=5):
         filtered = skimage.filters.rank.otsu(dapi, selem=selem)
     elif method=='percentile':
         filtered = skimage.filters.rank.percentile(dapi,selem=selem,p0=percentile)
-    elif filter:
+    elif method=='mean':
         filtered = skimage.filters.rank.mean(dapi, selem=selem)
     else:
-        return dapi
+        raise ValueError(f'method="{method}" not supported for ops.process.binarize')
 
     mask = dapi > filtered
     mask = skimage.morphology.remove_small_objects(mask, min_size=min_size)
