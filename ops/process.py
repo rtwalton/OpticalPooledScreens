@@ -372,40 +372,62 @@ def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
 
     return result
 
-def find_tubulin_background(tubulin, nuclei, threshold, var_size=10, smooth=5, var_threshold=20000,
-                radius=15, area_min=500, area_max=10000, score=lambda r: r.mean_intensity,
-                method='otsu',**kwargs):
-    """radius determines neighborhood for local mean thresholding, 
-    smooth determines gaussian kernel for smoothing prior to watershed.
-    """
+def find_foci(data, radius=3, threshold=10, remove_border_foci=False):
+    tophat = skimage.morphology.white_tophat(data,selem=skimage.morphology.disk(radius))
+    tophat_log = ops.process.log_ndi(tophat, sigma=radius)
 
-    def var_filter(arr, size):
-        c1 = ndimage.filters.uniform_filter(arr, size)
-        c2 = ndimage.filters.uniform_filter(arr*arr, size)
-        return ((c2 - c1*c1))
-
-    # smoothed variance filter to enhave contrast
-    var = var_filter(tubulin.astype('float'),var_size)
-    preprocess = ndimage.filters.gaussian_filter(var,sigma=smooth)
-    preprocess = np.clip(preprocess,0,65535).astype('uint16')
-
-    # binarize with a local otsu threshold, keep only regions above variance threshold
-    mask = binarize(preprocess, radius, area_min, method=method,**kwargs )
+    mask = tophat_log > threshold
+    mask = skimage.morphology.remove_small_objects(mask,min_size=(radius**2))
     labeled = skimage.measure.label(mask)
-    labeled = filter_by_region(labeled, score, threshold=lambda x:var_threshold, intensity_image=preprocess) > 0
+    labeled = ops.process.apply_watershed(labeled,smooth=1)
 
-    # add areas labeled as nuclei
-    background = (nuclei +labeled)>0
+    if remove_border_foci:
+        border_mask = data>0
+        labeled = remove_border(labeled,~border_mask)
 
-    # fill holes below minimum area or above intensity threshold
-    filled = ndimage.binary_fill_holes(background)
-    difference = skimage.measure.label(filled!=background)
-    change = filter_by_region(difference, lambda r: ((r.area < area_min) | (r.mean_intensity>threshold)), 0, intensity_image=tubulin) > 0
-    background[change] = filled[change]
-
-    return background
+    return labeled
 
 def binarize(image, radius, min_size,method='mean',percentile=0.5,equalize=False,filter=True):
+def remove_border(labels, mask, dilate=5):
+    mask = skimage.morphology.binary_dilation(mask,np.ones((dilate,dilate)))
+    remove = np.unique(labels[mask])
+    labels = labels.copy()
+    labels.flat[np.in1d(labels,remove)] = 0
+    return labels
+
+# def find_tubulin_background(tubulin, nuclei, threshold, var_size=10, smooth=5, var_threshold=20000,
+#                 radius=15, area_min=500, area_max=10000, score=lambda r: r.mean_intensity,
+#                 method='otsu',**kwargs):
+#     """radius determines neighborhood for local mean thresholding, 
+#     smooth determines gaussian kernel for smoothing prior to watershed.
+#     """
+
+#     def var_filter(arr, size):
+#         c1 = ndimage.filters.uniform_filter(arr, size)
+#         c2 = ndimage.filters.uniform_filter(arr*arr, size)
+#         return ((c2 - c1*c1))
+
+#     # smoothed variance filter to enhave contrast
+#     var = var_filter(tubulin.astype('float'),var_size)
+#     preprocess = ndimage.filters.gaussian_filter(var,sigma=smooth)
+#     preprocess = np.clip(preprocess,0,65535).astype('uint16')
+
+#     # binarize with a local otsu threshold, keep only regions above variance threshold
+#     mask = binarize(preprocess, radius, area_min, method=method,**kwargs )
+#     labeled = skimage.measure.label(mask)
+#     labeled = filter_by_region(labeled, score, threshold=lambda x:var_threshold, intensity_image=preprocess) > 0
+
+#     # add areas labeled as nuclei
+#     background = (nuclei +labeled)>0
+
+#     # fill holes below minimum area or above intensity threshold
+#     filled = ndimage.binary_fill_holes(background)
+#     difference = skimage.measure.label(filled!=background)
+#     change = filter_by_region(difference, lambda r: ((r.area < area_min) | (r.mean_intensity>threshold)), 0, intensity_image=tubulin) > 0
+#     background[change] = filled[change]
+
+#     return background
+
     """Apply local mean threshold to find outlines. Filter out
     background shapes. Otsu threshold on list of region mean intensities will remove a few
     dark cells. Could use shape to improve the filtering.
