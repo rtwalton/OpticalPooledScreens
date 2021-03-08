@@ -19,7 +19,7 @@ import ops.io_hdf
 from ops.process import Align
 from scipy.stats import mode
 from ops.constants import *
-from itertools import combinations
+from itertools import combinations, permutations, product
 
 
 class Snake():
@@ -465,7 +465,7 @@ class Snake():
                 .pipe(ops.in_situ.call_cells_mapping,df_pool))
 
     @staticmethod
-    def _extract_features(data, labels, wildcards, features=None,**kwargs):
+    def _extract_features(data, labels, wildcards, features=None,multichannel=False,**kwargs):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -473,8 +473,11 @@ class Snake():
         from ops.features import features_basic
         features = features.copy() if features else dict()
         features.update(features_basic)
-
-        df = feature_table(data, labels, features)
+        if multichannel:
+            from ops.process import feature_table_multichannel
+            df = feature_table_multichannel(data, labels, features)
+        else:
+            df = feature_table(data, labels, features)
 
         for k,v in sorted(wildcards.items()):
             df[k] = v
@@ -494,7 +497,7 @@ class Snake():
         return pd.concat(arr).rename(columns={'label':'cell'})
 
     @staticmethod
-    def _extract_features_bare(data, labels, features=None, wildcards=None,**kwargs):
+    def _extract_features_bare(data, labels, features=None, wildcards=None, multichannel=False, **kwargs):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -502,7 +505,11 @@ class Snake():
         features = features.copy() if features else dict()
         features.update({'label': lambda r: r.label})
 
-        df = feature_table(data, labels, features)
+        if multichannel:
+            from ops.process import feature_table_multichannel
+            df = feature_table_multichannel(data, labels, features)
+        else:
+            df = feature_table(data, labels, features)
 
         if wildcards is not None:
             for k,v in sorted(wildcards.items()):
@@ -562,11 +569,12 @@ class Snake():
 
         features_n = {k + '_nuclear': v for k,v in features_n.items()}
         features_c = {k + '_cell': v    for k,v in features_c.items()}
+        features_c.update({'area': lambda r: r.area})
 
         df_n = (Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
             .rename(columns={'area': 'area_nuclear'}))
 
-        df_c =  (Snake._extract_features(data_phenotype, cells, wildcards, features_c)
+        df_c =  (Snake._extract_features_bare(data_phenotype, cells, wildcards, features_c)
             .drop(['i', 'j'], axis=1).rename(columns={'area': 'area_cell'}))
 
 
@@ -628,7 +636,7 @@ class Snake():
         return df
 
     @staticmethod
-    def _extract_phenotype_cp(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
+    def _extract_phenotype_cp_old(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
         import ops.cp_emulator
 
         if nucleus_channels == 'all':
@@ -660,14 +668,14 @@ class Snake():
         dfs.append(Snake._extract_features_bare(cells,cells,ops.cp_emulator.shape_features)
             .rename(columns=ops.cp_emulator.shape_columns)
             .set_index('label')
-            .rename(columns = lambda x: 'cell_'+x)
+            .add_prefix('cell_')
             )
 
         # nucleus grayscale channel features
         dfs.extend([(Snake._extract_features_bare(data_phenotype[...,channel,:,:],nuclei,ops.cp_emulator.grayscale_features)
             .rename(columns=ops.cp_emulator.grayscale_columns)
             .set_index('label')
-            .rename(columns = lambda x: 'nucleus_'+channel_names[channel]+'_'+x)
+            .add_prefix(f'nucleus_{channel_names[channel]}_')
             ) 
             for channel in nucleus_channels]
             )
@@ -676,7 +684,7 @@ class Snake():
         dfs.extend([(Snake._extract_features_bare(data_phenotype[...,channel,:,:],cells,ops.cp_emulator.grayscale_features)
             .rename(columns=ops.cp_emulator.grayscale_columns)
             .set_index('label')
-            .rename(columns = lambda x: 'cell_'+channel_names[channel]+'_'+x)
+            .add_prefix(f'cell_{channel_names[channel]}_')
             ) 
             for channel in cell_channels]
             )
@@ -728,26 +736,199 @@ class Snake():
         dfs.append(Snake._extract_features_bare(data_phenotype[...,nucleus_channels,:,:],nuclei,ops.cp_emulator.correlation_features)
             .rename(columns=nucleus_correlation_columns)
             .set_index('label')
-            .rename(columns = lambda x: 'nucleus_'+x)
+            .add_prefix('nucleus_')
             )
 
         # cell channel correlations
         dfs.append(Snake._extract_features_bare(data_phenotype[...,cell_channels,:,:],cells,ops.cp_emulator.correlation_features)
             .rename(columns=cell_correlation_columns)
             .set_index('label')
-            .rename(columns = lambda x: 'cell_'+x)
+            .add_prefix('cell_')
             )
 
         # nucleus neighbors
-        dfs.append(ops.cp_emulator.neighbor_measurements(nuclei,distances=[1,10])
+        dfs.append(ops.cp_emulator.neighbor_measurements(nuclei,distances=[1])
             .set_index('label')
-            .rename(columns = lambda x: 'nucleus_'+x)
+            .add_prefix('nucleus_')
             )
 
         # cell neighbors
-        dfs.append(ops.cp_emulator.neighbor_measurements(cells,distances=[1,10])
+        dfs.append(ops.cp_emulator.neighbor_measurements(cells,distances=[1])
             .set_index('label')
-            .rename(columns = lambda x: 'cell_'+x)
+            .add_prefix('cell_')
+            )
+
+        return pd.concat(dfs,axis=1,join='outer',sort=True).reset_index()
+
+    @staticmethod
+    def _extract_phenotype_cp_ch(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
+        import ops.cp_emulator
+        from functools import partial
+
+        if nucleus_channels == 'all':
+            try:
+                nucleus_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                nucleus_channels = [0]
+
+        if cell_channels == 'all':
+            try:
+                cell_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                cell_channels = [0]
+
+        dfs = []
+
+        # with warnings.catch_warnings():
+        #     warnings.simplefilter("ignore")
+        #     data_phenotype = data_phenotype.astype(np.uint16)
+
+        nucleus_features = {}
+        nucleus_columns = {}
+        for ch in nucleus_channels:
+            nucleus_columns.update({k.format(channel=channel_names[ch]):v.format(channel=channel_names[ch])
+                for k,v in ops.cp_emulator.grayscale_columns_ch.items()
+                })
+            for name,func in ops.cp_emulator.grayscale_features_ch.items():
+                nucleus_features[f'{channel_names[ch]}_{name}'] = partial(func,ch=ch)
+        for first,second in combinations(list(range(len(nucleus_channels))),2):
+            nucleus_columns.update({k.format(first=channel_names[first],second=channel_names[second]):
+                v.format(first=channel_names[first],second=channel_names[second])
+                for k,v in ops.cp_emulator.colocalization_columns_ch.items()
+                })
+            for name,func in ops.cp_emulator.correlation_features_ch.items():
+                nucleus_features[f'{name}_{channel_names[first]}_{channel_names[second]}'] = partial(func,ch1=first,ch2=second)
+
+        nucleus_features.update(ops.cp_emulator.shape_features)
+        nucleus_columns.update(ops.cp_emulator.shape_columns)
+
+        cell_features = {}
+        cell_columns = {}
+        for ch in cell_channels:
+            cell_columns.update({k.format(channel=channel_names[ch]):v.format(channel=channel_names[ch])
+                for k,v in ops.cp_emulator.grayscale_columns_ch.items()
+                })
+            for name,func in ops.cp_emulator.grayscale_features_ch.items():
+                cell_features[f'{channel_names[ch]}_{name}'] = partial(func,ch=ch)
+        for first,second in combinations(list(range(len(cell_channels))),2):
+            cell_columns.update({k.format(first=channel_names[first],second=channel_names[second]):
+                v.format(first=channel_names[first],second=channel_names[second])
+                for k,v in ops.cp_emulator.colocalization_columns_ch.items()
+                })
+            for name,func in ops.cp_emulator.correlation_features_ch.items():
+                cell_features[f'{name}_{channel_names[first]}_{channel_names[second]}'] = partial(func,ch1=first,ch2=second)
+
+        cell_features.update(ops.cp_emulator.shape_features)
+        cell_columns.update(ops.cp_emulator.shape_columns)
+
+        # nucleus features
+        dfs.append(Snake._extract_features(data_phenotype[...,nucleus_channels,:,:],
+            nuclei,wildcards,nucleus_features)
+            .rename(columns=nucleus_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'nucleus_'+x if x not in wildcards.keys() else x)
+            )
+
+        # cell features
+        dfs.append(Snake._extract_features_bare(data_phenotype[...,cell_channels,:,:],
+            cells,cell_features)
+            .rename(columns=cell_columns)
+            .set_index('label')
+            .add_prefix('cell_')
+            )
+
+        # nucleus neighbors
+        dfs.append(ops.cp_emulator.neighbor_measurements(nuclei,distances=[1])
+            .set_index('label')
+            .add_prefix('nucleus_')
+            )
+
+        # cell neighbors
+        dfs.append(ops.cp_emulator.neighbor_measurements(cells,distances=[1])
+            .set_index('label')
+            .add_prefix('cell_')
+            )
+
+        return pd.concat(dfs,axis=1,join='outer',sort=True).reset_index()
+
+    @staticmethod
+    def _extract_phenotype_cp_multichannel(data_phenotype, nuclei, cells, wildcards, 
+        nucleus_channels='all', cell_channels='all', foci_channel=None,
+        channel_names=['dapi','tubulin','gh2ax','phalloidin']):
+        import ops.cp_emulator
+
+        if nucleus_channels == 'all':
+            try:
+                nucleus_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                nucleus_channels = [0]
+
+        if cell_channels == 'all':
+            try:
+                cell_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                cell_channels = [0]
+
+        dfs = []
+
+        features = ops.cp_emulator.grayscale_features_multichannel
+        features.update(ops.cp_emulator.correlation_features_multichannel)
+        features.update(ops.cp_emulator.shape_features)
+
+        def make_column_map(channels):
+            columns = {}
+
+            for feat,out in ops.cp_emulator.grayscale_columns_multichannel.items():
+                columns.update({f'{feat}_{n}':f'{channel_names[ch]}_{renamed}' 
+                    for n,(renamed,ch) in enumerate(product(out,channels))})
+
+            for feat,out in ops.cp_emulator.correlation_columns_multichannel.items():
+                if feat=='lstsq_slope':
+                    iterator = permutations
+                else:
+                    iterator = combinations
+                columns.update({f'{feat}_{n}':renamed.format(first=channel_names[first],second=channel_names[second])
+                    for n,(renamed,(first,second)) in enumerate(product(out,iterator(channels,2)))})
+
+            columns.update(ops.cp_emulator.shape_columns)
+            return columns
+
+        nucleus_columns = make_column_map(nucleus_channels)
+        cell_columns = make_column_map(cell_channels)
+
+        # nucleus features
+        dfs.append(Snake._extract_features(data_phenotype[...,nucleus_channels,:,:],
+            nuclei,wildcards,features,multichannel=True)
+            .rename(columns=nucleus_columns)
+            .set_index('label')
+            .rename(columns = lambda x: 'nucleus_'+x if x not in wildcards.keys() else x)
+            )
+
+        # cell features
+        dfs.append(Snake._extract_features_bare(data_phenotype[...,cell_channels,:,:],
+            cells,features,multichannel=True)
+            .rename(columns=cell_columns)
+            .set_index('label')
+            .add_prefix('cell_')
+            )
+
+        if foci_channel is not None:
+            foci = ops.process.find_foci(data_phenotype[...,foci_channel,:,:],remove_border_foci=True)
+            dfs.append(Snake._extract_features_bare(foci,cells,features=ops.features.foci)
+                .set_index('label')
+                .add_prefix(f'{channel_names[foci_channel]}_')
+                )
+
+        # nucleus neighbors
+        dfs.append(ops.cp_emulator.neighbor_measurements(nuclei,distances=[1])
+            .set_index('label')
+            .add_prefix('nucleus_')
+            )
+
+        # cell neighbors
+        dfs.append(ops.cp_emulator.neighbor_measurements(cells,distances=[1])
+            .set_index('label')
+            .add_prefix('cell_')
             )
 
         return pd.concat(dfs,axis=1,join='outer',sort=True).reset_index()

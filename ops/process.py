@@ -47,6 +47,34 @@ def feature_table(data, labels, features, global_features=None):
             results[feature] = func(data, labels)
     return pd.DataFrame(results)
 
+def feature_table_multichannel(data, labels, features, global_features=None):
+    """Apply functions in feature dictionary to regions in data 
+    specified by integer labels. If provided, the global feature
+    dictionary is applied to the full input data and labels. 
+
+    Results are combined in a dataframe with one row per label and
+    one column per feature.
+    """
+    regions = ops.utils.regionprops_multichannel(labels, intensity_image=data)
+    results = defaultdict(list)
+    for feature,func in features.items():
+        # check if iterable with first result
+        result_0 = func(regions[0])
+        if isinstance(result_0,Iterable):
+            if len(result_0)==1:
+                results[feature] = [func(region)[0] for region in regions]
+            else:
+                for result in map(func,regions):
+                    for index,value in enumerate(result):
+                        results[feature+'_{}'.format(index)].append(value)
+        else:
+            results[feature] = list(map(func,regions))
+
+    if global_features:
+        for feature, func in global_features.items():
+            results[feature] = func(data, labels)
+    return pd.DataFrame(results)
+
 
 def build_feature_table(stack, labels, features, index):
     """Iterate over leading dimensions of stack, applying `feature_table`. 
@@ -488,9 +516,11 @@ def apply_watershed(img, smooth=4):
     distance = ndimage.distance_transform_edt(img)
     if smooth > 0:
         distance = skimage.filters.gaussian(distance, sigma=smooth)
-    local_max = skimage.feature.peak_local_max(
-                    distance, indices=False, footprint=np.ones((3, 3)), 
+    local_max_indices = skimage.feature.peak_local_max(
+                    distance, footprint=np.ones((3, 3)), 
                     exclude_border=False)
+    local_max = np.zeros_like(img,dtype=bool)
+    local_max[tuple(local_max_indices.T)] = True
 
     markers = ndimage.label(local_max)[0]
     try:

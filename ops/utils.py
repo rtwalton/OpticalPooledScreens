@@ -765,3 +765,18 @@ def regionprops(labeled, intensity_image):
         region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
 
     return regions
+
+def regionprops_multichannel(labeled, intensity_image):
+    """Format intensity image axes for compatability with updated skimage.measure.regionprops that allows multichannel
+    images. Somethings are faster than `ops.utils.regionprops`, others are slower.
+    """
+    import skimage.measure
+
+    if intensity_image.ndim == 2:
+        base_image = intensity_image
+    else:
+        base_image = np.moveaxis(intensity_image,range(intensity_image.ndim-2),range(-1,-(intensity_image.ndim-1),-1))
+        
+    regions = skimage.measure.regionprops(labeled, intensity_image=base_image)
+
+    return regions
