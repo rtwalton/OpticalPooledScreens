@@ -32,7 +32,35 @@ from ops.io import read_stack as read
 from ops.firesnake import Snake
 from ops.filenames import name_file as name
 import pandas
+from centrosome.propagate import propagate
 from decorator import decorator
+
+## SEGMENTATION
+
+def identify_secondary_objects(image, primary_segmentation, method='propagation', regularization_factor=0.05,
+	threshold='otsu', remove_boundary_objects=True):
+	if method != 'propagation':
+		raise ValueError(f'method={method} not implemented')
+
+	if isinstance(threshold,np.ndarray):
+		# pre-thresholded
+		thresholded = threshold
+	elif isinstance(threshold,(int,float)):
+		thresholded = image > threshold
+	elif threshold == 'otsu':
+		thresholded = image > otsu(image)
+	else:
+		raise ValueError(f'threshold={threshold} not implemented')
+		
+	secondary_segmentation,_ = propagate(img_as_ubyte(image),primary_segmentation,thresholded,regularization_factor)
+
+	if remove_boundary_objects:
+		cut = np.concatenate([secondary_segmentation[0,:], secondary_segmentation[-1,:],
+			secondary_segmentation[:,0], secondary_segmentation[:,-1]])
+		secondary_segmentation.flat[np.in1d(secondary_segmentation, np.unique(cut))] = 0
+
+	return secondary_segmentation.astype(np.uint16)
+
 ## FEATURES
 
 def apply_extract_features_cp(well_tile,filepattern):
