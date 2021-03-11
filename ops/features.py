@@ -1,6 +1,5 @@
 import numpy as np
 import ops.utils
-from scipy.stats import median_abs_deviation
 
 # FUNCTIONS
 
