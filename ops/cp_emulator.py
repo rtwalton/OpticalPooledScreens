@@ -27,12 +27,6 @@ import skimage.morphology
 from skimage import img_as_ubyte
 from ops.features import correlate_channels_masked, masked, correlate_channels_all_multichannel
 from ops.utils import subimage
-from ops.io_hdf import read_hdf_image
-from ops.io import read_stack as read
-from ops.firesnake import Snake
-from ops.filenames import name_file as name
-import pandas
-from centrosome.propagate import propagate
 from decorator import decorator
 
 ## SEGMENTATION
@@ -41,6 +35,8 @@ def identify_secondary_objects(image, primary_segmentation, method='propagation'
 	threshold='otsu', remove_boundary_objects=True):
 	if method != 'propagation':
 		raise ValueError(f'method={method} not implemented')
+
+	from centrosome.propagate import propagate
 
 	if isinstance(threshold,np.ndarray):
 		# pre-thresholded
@@ -64,12 +60,16 @@ def identify_secondary_objects(image, primary_segmentation, method='propagation'
 ## FEATURES
 
 def apply_extract_features_cp(well_tile,filepattern):
-    wildcards = {'well':well_tile[0],'tile':well_tile[1]}
-    filepattern.update(wildcards)
-    stacked = read_hdf_image(name(filepattern))
-    nuclei = read(name(filepattern,subdir='process_ph',tag='nuclei',ext='tif'))
-    cells = read(name(filepattern,subdir='process_ph',tag='cells',ext='tif'))
-    df_result = Snake._extract_phenotype_cp(data_phenotype=stacked,
+	from ops.io_hdf import read_hdf_image
+	from ops.io import read_stack as read
+	from ops.firesnake import Snake
+	from ops.filenames import name_file as name
+	wildcards = {'well':well_tile[0],'tile':well_tile[1]}
+	filepattern.update(wildcards)
+	stacked = read_hdf_image(name(filepattern))
+	nuclei = read(name(filepattern,subdir='process_ph',tag='nuclei',ext='tif'))
+	cells = read(name(filepattern,subdir='process_ph',tag='cells',ext='tif'))
+	df_result = Snake._extract_phenotype_cp(data_phenotype=stacked,
                                             nuclei=nuclei,
                                             cells=cells,
                                             wildcards=wildcards,
@@ -77,16 +77,16 @@ def apply_extract_features_cp(well_tile,filepattern):
                                             cell_channels=[0,1,2,3],
                                             channel_names=['dapi','tubulin','gh2ax','phalloidin']
                                            )
-    df_result.to_csv(name(filepattern,subdir='process_ph',tag='cp_phenotype',ext='csv'))
+	df_result.to_csv(name(filepattern,subdir='process_ph',tag='cp_phenotype',ext='csv'))
 
 EDGE_CONNECTIVITY = 2 # cellprofiler uses edge connectivity of 1, which exlucdes pixels catty-corner to a boundary
 
 ZERNIKE_DEGREE = 9
 
-GRANULARITY_BACKGROUND = 10 #this should be a bit larger than the radius of the features, i.e., "granules", of interest after downsampling
-GRANULARITY_BACKGROUND_DOWNSAMPLE = 1
-GRANULARITY_DOWNSAMPLE = 1
-GRANULARITY_LENGTH = 16
+# GRANULARITY_BACKGROUND = 10 #this should be a bit larger than the radius of the features, i.e., "granules", of interest after downsampling
+# GRANULARITY_BACKGROUND_DOWNSAMPLE = 1
+# GRANULARITY_DOWNSAMPLE = 1
+# GRANULARITY_LENGTH = 16
 
 # # MeasureCorrelation:'Measure the intensity correlation between all channels, within all objects.'
 # #     Hidden:5
@@ -612,6 +612,7 @@ grayscale_columns_multichannel = {**intensity_columns_multichannel,
 					**intensity_distribution_columns_multichannel,
 					**texture_columns_multichannel
 					}
+					
 ######################################################################################################################################
 
 @decorator
@@ -776,78 +777,78 @@ def costes_threshold(A,B,step=1,pearson_cutoff=0):
 
 	return threshold*A_dtype_max,(a*threshold+b)*B_dtype_max
 
-def granularity_spectrum(grayscale, labeled, background_radius=5, spectrum_length=16, downsample=1, background_downsample=0.5):
-	"""Returns granularity spectrum as defined in the CellProfiler documentation.
-	Scaled so that units are approximately the % of new granules stuck in imaginary sieve when moving to 
-	size specified by spectrum component
-	Helpful resources:
-	Maragos P. “Pattern spectrum and multiscale shape representation”,
-		IEEE Transactions on Pattern Analysis and Machine Intelligence, 
-		VOL 11, NO 7, pp. 701-716, 1989
-	Vincent L. (1992) “Morphological Area Opening and Closing for
-		Grayscale Images”, Proc. NATO Shape in Picture Workshop,
-		Driebergen, The Netherlands, pp. 197-208.
-	https://en.wikipedia.org/wiki/Granulometry_(morphology)
-	http://www.ravkin.net/presentations/Statistical%20properties%20of%20algorithms%20for%20analysis%20of%20cell%20images.pdf
-	"""
-	intensity_image = grayscale.copy()
-	image = labeled.copy()
+# def granularity_spectrum(grayscale, labeled, background_radius=5, spectrum_length=16, downsample=1, background_downsample=0.5):
+# 	"""Returns granularity spectrum as defined in the CellProfiler documentation.
+# 	Scaled so that units are approximately the % of new granules stuck in imaginary sieve when moving to 
+# 	size specified by spectrum component
+# 	Helpful resources:
+# 	Maragos P. “Pattern spectrum and multiscale shape representation”,
+# 		IEEE Transactions on Pattern Analysis and Machine Intelligence, 
+# 		VOL 11, NO 7, pp. 701-716, 1989
+# 	Vincent L. (1992) “Morphological Area Opening and Closing for
+# 		Grayscale Images”, Proc. NATO Shape in Picture Workshop,
+# 		Driebergen, The Netherlands, pp. 197-208.
+# 	https://en.wikipedia.org/wiki/Granulometry_(morphology)
+# 	http://www.ravkin.net/presentations/Statistical%20properties%20of%20algorithms%20for%20analysis%20of%20cell%20images.pdf
+# 	"""
+# 	intensity_image = grayscale.copy()
+# 	image = labeled.copy()
 
 
-	i_sub,j_sub = np.mgrid[0:image.shape[0]*downsample, 0:image.shape[1]*downsample].astype(float)/downsample
-	if downsample < 1:
-		intensity_image = map_coordinates(intensity_image,(i_sub,j_sub),order=1)
-		image = map_coordinates(image.astype(float),(i_sub,j_sub))>0.9
+# 	i_sub,j_sub = np.mgrid[0:image.shape[0]*downsample, 0:image.shape[1]*downsample].astype(float)/downsample
+# 	if downsample < 1:
+# 		intensity_image = map_coordinates(intensity_image,(i_sub,j_sub),order=1)
+# 		image = map_coordinates(image.astype(float),(i_sub,j_sub))>0.9
 
-	if background_downsample <1:
-		i_sub_sub,j_sub_sub = (np.mgrid[0:image.shape[0]*background_downsample, 
-			0:image.shape[1]*background_downsample].astype(float)/background_downsample)
-		background_intensity = map_coordinates(intensity_image,(i_sub_sub,j_sub_sub),order=1)
-		background_mask = map_coordinates(image.astype(float),(i_sub_sub,j_sub_sub))>0.9
-	else:
-		background_intensity = intensity_image
-		background_mask = image
+# 	if background_downsample <1:
+# 		i_sub_sub,j_sub_sub = (np.mgrid[0:image.shape[0]*background_downsample, 
+# 			0:image.shape[1]*background_downsample].astype(float)/background_downsample)
+# 		background_intensity = map_coordinates(intensity_image,(i_sub_sub,j_sub_sub),order=1)
+# 		background_mask = map_coordinates(image.astype(float),(i_sub_sub,j_sub_sub))>0.9
+# 	else:
+# 		background_intensity = intensity_image
+# 		background_mask = image
 
-	selem = skimage.morphology.disk(background_radius,dtype=bool)
+# 	selem = skimage.morphology.disk(background_radius,dtype=bool)
 
-	# cellprofiler masks before and between erosion/dilation steps here--
-	# this creates unwanted edge effects here. Combine erosion/dilation into opening
-	# background = skimage.morphology.erosion(background_intensity*background_mask,selem=selem)
-	# background = skimage.morphology.dilation(background,selem=selem)
-	background = skimage.morphology.opening(background_intensity,selem=selem)
+# 	# cellprofiler masks before and between erosion/dilation steps here--
+# 	# this creates unwanted edge effects here. Combine erosion/dilation into opening
+# 	# background = skimage.morphology.erosion(background_intensity*background_mask,selem=selem)
+# 	# background = skimage.morphology.dilation(background,selem=selem)
+# 	background = skimage.morphology.opening(background_intensity,selem=selem)
 
-	# rescaling
-	if background_downsample < 1:
-		# rescale background to match intensity_image
-		i_sub *= float(background.shape[0]-1)/float(image.shape[0]-1)
-		j_sub *= float(background.shape[1]-1)/float(image.shape[1]-1)
-		background = map_coordinates(background,(i_sub,j_sub),order=1)
+# 	# rescaling
+# 	if background_downsample < 1:
+# 		# rescale background to match intensity_image
+# 		i_sub *= float(background.shape[0]-1)/float(image.shape[0]-1)
+# 		j_sub *= float(background.shape[1]-1)/float(image.shape[1]-1)
+# 		background = map_coordinates(background,(i_sub,j_sub),order=1)
 
-	# remove background
-	intensity_image -= background
-	intensity_image[intensity_image<0] = 0
+# 	# remove background
+# 	intensity_image -= background
+# 	intensity_image[intensity_image<0] = 0
 
-	# calculate granularity spectrum
-	start = np.mean(intensity_image[image])
+# 	# calculate granularity spectrum
+# 	start = np.mean(intensity_image[image])
 
-	# cellprofiler also does unwanted masking step here
-	erosion = intensity_image
+# 	# cellprofiler also does unwanted masking step here
+# 	erosion = intensity_image
 
-	current = start
+# 	current = start
 
-	footprint = skimage.morphology.disk(1,dtype=bool)
+# 	footprint = skimage.morphology.disk(1,dtype=bool)
 
-	spectrum = []
-	for _ in range(spectrum_length):
-		previous = current.copy()
-		# cellprofiler does unwanted masking step here
-		erosion = skimage.morphology.erosion(erosion, selem=footprint)
-		# masking okay here--inhibits bright regions from outside object being propagated into the image
-		reconstruction = skimage.morphology.reconstruction(erosion*image, intensity_image, selem=footprint)
-		current = np.mean(reconstruction[image])
-		spectrum.append((previous - current) * 100 / start)
+# 	spectrum = []
+# 	for _ in range(spectrum_length):
+# 		previous = current.copy()
+# 		# cellprofiler does unwanted masking step here
+# 		erosion = skimage.morphology.erosion(erosion, selem=footprint)
+# 		# masking okay here--inhibits bright regions from outside object being propagated into the image
+# 		reconstruction = skimage.morphology.reconstruction(erosion*image, intensity_image, selem=footprint)
+# 		current = np.mean(reconstruction[image])
+# 		spectrum.append((previous - current) * 100 / start)
 
-	return spectrum
+# 	return spectrum
 
 def boundaries(labeled,connectivity=1,mode='inner',background=0):
     """Supplement skimage.segmentation.find_boundaries to include image edge pixels of 
