@@ -20,6 +20,7 @@ from ops.process import Align
 from scipy.stats import mode
 from ops.constants import *
 from itertools import combinations, permutations, product
+import ops.cp_emulator
 
 
 class Snake():
@@ -506,15 +507,15 @@ class Snake():
         """Extracts features in dictionary and combines with generic region
         features.
         """
-        from ops.process import feature_table
         from ops.features import features_basic
         features = features.copy() if features else dict()
         features.update(features_basic)
         if multichannel:
-            from ops.process import feature_table_multichannel
-            df = feature_table_multichannel(data, labels, features)
+            from ops.process import feature_table_multichannel as feature_table
         else:
-            df = feature_table(data, labels, features)
+            from ops.process import feature_table
+            
+        df = feature_table(data, labels, features)
 
         for k,v in sorted(wildcards.items()):
             df[k] = v
@@ -543,10 +544,11 @@ class Snake():
         features.update({'label': lambda r: r.label})
 
         if multichannel:
-            from ops.process import feature_table_multichannel
-            df = feature_table_multichannel(data, labels, features)
+            from ops.process import feature_table_multichannel as feature_table
         else:
-            df = feature_table(data, labels, features)
+            from ops.process import feature_table
+        
+        df = feature_table(data, labels, features)
 
         if wildcards is not None:
             for k,v in sorted(wildcards.items()):
@@ -674,7 +676,6 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_cp_old(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
-        import ops.cp_emulator
 
         if nucleus_channels == 'all':
             try:
@@ -799,7 +800,6 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_cp_ch(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
-        import ops.cp_emulator
         from functools import partial
 
         if nucleus_channels == 'all':
@@ -892,8 +892,6 @@ class Snake():
     def _extract_phenotype_cp_multichannel(data_phenotype, nuclei, cells, wildcards, 
         nucleus_channels='all', cell_channels='all', foci_channel=None,
         channel_names=['dapi','tubulin','gh2ax','phalloidin']):
-        import ops.cp_emulator
-
         if nucleus_channels == 'all':
             try:
                 nucleus_channels = list(range(data_phenotype.shape[-3]))
@@ -942,8 +940,8 @@ class Snake():
             )
 
         # cell features
-        dfs.append(Snake._extract_features_bare(data_phenotype[...,cell_channels,:,:],
-            cells,features,multichannel=True)
+        dfs.append(Snake._extract_features(data_phenotype[...,cell_channels,:,:],
+            cells,dict(),features,multichannel=True)
             .rename(columns=cell_columns)
             .set_index('label')
             .add_prefix('cell_')
@@ -953,7 +951,7 @@ class Snake():
             foci = ops.process.find_foci(data_phenotype[...,foci_channel,:,:],remove_border_foci=True)
             dfs.append(Snake._extract_features_bare(foci,cells,features=ops.features.foci)
                 .set_index('label')
-                .add_prefix(f'{channel_names[foci_channel]}_')
+                .add_prefix(f'cell_{channel_names[foci_channel]}_')
                 )
 
         # nucleus neighbors
