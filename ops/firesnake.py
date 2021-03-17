@@ -288,41 +288,78 @@ class Snake():
         return cells
 
     @staticmethod
-    def _segment_cells_tubulin(data, nuclei, threshold, area_min, area_max, radius=15,
-        method='otsu', tubulin_channel=1, remove_boundary_cells=False, **kwargs):
-        """Segment cells from aligned data. Matches cell labels to nuclei labels.
-        Note that labels can be skipped, for example if cells are touching the 
-        image boundary.
-        """
-        if data.ndim == 3:
-            tubulin = data[tubulin_channel].astype(np.uint16)
-        elif data.ndim == 2:
-            tubulin = data.astype(np.uint16)
+    def _segment_cells_robust(data, channel, nuclei, background_offset, background_quantile=0.05, 
+        smooth=None, erosion=None, add_nuclei=True, mask_dilation=5):
+
+        # find region where all channels are valid, e.g. after applying offsets to align channels
+        mask = data.min(axis=0)>0
+
+        if smooth is not None:
+            image = skimage.filters.gaussian(data[channel],smooth,preserve_range=True).astype(data.dtype)
         else:
-            raise ValueError('input image has more than 3 dimensions')
+            image = data[channel]
 
-        kwargs = dict(threshold=threshold, 
-            area_min=area_min, 
-            area_max=area_max, 
-            radius=radius,
-            method=method)
+        threshold = np.quantile(image[mask],background_quantile) + background_offset
 
-        kwargs.update(**kwargs)
+        semantic = image > threshold
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            mask = ops.process.find_tubulin_background(tubulin,nuclei,**kwargs)
+        if add_nuclei:
+            semantic += nuclei.astype(bool)
 
-        try:
-            # skimage precision warning
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                cells = ops.process.find_cells(nuclei,mask,remove_boundary_cells=remove_boundary_cells)
-        except ValueError:
-            print('segment_cells error -- no cells')
-            cells = nuclei
+        if erosion is not None:
+            semantic[~mask] = True
+            semantic = skimage.morphology.binary_erosion(semantic, skimage.morphology.disk(erosion/2))
+            semantic[~mask] = False
+            if add_nuclei:
+                semantic += nuclei.astype(bool)
 
-        return cells
+        labels = ops.process.find_cells(nuclei,semantic)
+
+        def remove_border(labels, mask, dilate=mask_dilation):
+            mask = skimage.morphology.binary_dilation(mask,np.ones((dilate,dilate)))
+            remove = np.unique(labels[mask])
+            labels = labels.copy()
+            labels.flat[np.in1d(labels,remove)] = 0
+            return labels
+
+        return remove_border(labels,~mask)
+
+    # @staticmethod
+    # def _segment_cells_tubulin(data, nuclei, threshold, area_min, area_max, radius=15,
+    #     method='otsu', tubulin_channel=1, remove_boundary_cells=False, **kwargs):
+    #     """Segment cells from aligned data. Matches cell labels to nuclei labels.
+    #     Note that labels can be skipped, for example if cells are touching the 
+    #     image boundary.
+    #     """
+    #     if data.ndim == 3:
+    #         tubulin = data[tubulin_channel].astype(np.uint16)
+    #     elif data.ndim == 2:
+    #         tubulin = data.astype(np.uint16)
+    #     else:
+    #         raise ValueError('input image has more than 3 dimensions')
+
+    #     kwargs = dict(threshold=threshold, 
+    #         area_min=area_min, 
+    #         area_max=area_max, 
+    #         radius=radius,
+    #         method=method)
+
+    #     kwargs.update(**kwargs)
+
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter("ignore")
+    #         mask = ops.process.find_tubulin_background(tubulin,nuclei,**kwargs)
+
+    #     try:
+    #         # skimage precision warning
+    #         with warnings.catch_warnings():
+    #             warnings.simplefilter("ignore")
+    #             cells = ops.process.find_cells(nuclei,mask,remove_boundary_cells=remove_boundary_cells)
+    #     except ValueError:
+    #         print('segment_cells error -- no cells')
+    #         cells = nuclei
+
+    #     return cells
 
     @staticmethod
     def _transform_log(data, sigma=1, skip_index=None):
