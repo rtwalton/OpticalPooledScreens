@@ -133,7 +133,7 @@ def consensus_matrix(
 
     for df, w in zip(dfs, weights):
         if combine_nt:
-            df = combine_nt_clusters(df, nt_threshold)
+            df = combine_nt_clusters(df, col=column, nt_threshold=nt_threshold)
 
         C += np.equal(*np.meshgrid(*(df[column].values,) * 2)) * w
 
@@ -166,7 +166,7 @@ def subsampled_consensus_matrix(
     for df in dfs:
         df = df.sort_index()
         if combine_nt:
-            df = combine_nt_clusters(df, nt_threshold)
+            df = combine_nt_clusters(df, col=column, nt_threshold=nt_threshold)
         selected = np.argwhere(full_index.isin(df.index))
         C_count[selected, selected.T] += 1
         C[selected, selected.T] += np.equal(
