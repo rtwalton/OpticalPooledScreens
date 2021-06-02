@@ -212,6 +212,21 @@ def add_rect_bounds(df, width=10, ij='ij', bounds_col='bounds'):
         arr.append((i - width, j - width, i + width, j + width))
     return df.assign(**{bounds_col: arr})
 
+def make_sq_bounds(
+        df,
+        input_bounds=['bounds_0','bounds_1','bounds_2','bounds_3'],
+        bounds_col='bounds'):
+
+    def split_pad(pad):
+            return (pad//2,pad//2+pad%2)
+            
+    arr = []
+    for bounds in df[input_bounds].values.astype(int):
+        width,height = (bounds[2]-bounds[0]),(bounds[3]-bounds[1])
+        diff = height-width
+        pad_width, pad_height = split_pad(np.clip(diff,0,None)),split_pad(np.clip(-diff,0,None))
+        arr.append(bounds+np.array([-pad_width[0],-pad_height[0],pad_width[1],pad_height[1]]))
+    return df.assign(**{bounds_col: arr})
 
 # BASE LABELING
 
