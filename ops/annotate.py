@@ -219,13 +219,13 @@ def make_sq_bounds(
 
     def split_pad(pad):
             return (pad//2,pad//2+pad%2)
-            
+
     arr = []
     for bounds in df[input_bounds].values.astype(int):
         width,height = (bounds[2]-bounds[0]),(bounds[3]-bounds[1])
         diff = height-width
         pad_width, pad_height = split_pad(np.clip(diff,0,None)),split_pad(np.clip(-diff,0,None))
-        arr.append(bounds+np.array([-pad_width[0],-pad_height[0],pad_width[1],pad_height[1]]))
+        arr.append(tuple(bounds+np.array([-pad_width[0],-pad_height[0],pad_width[1],pad_height[1]])))
     return df.assign(**{bounds_col: arr})
 
 # BASE LABELING
