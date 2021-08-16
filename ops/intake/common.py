@@ -207,11 +207,16 @@ def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_descr
     if backend == 'ND2SDK':
         reader = ND2_Reader
         axes = list('mtzcyx')
+        iter_axes = 'm' if iter_axes=='v' else iter_axes
     elif backend == 'python':
         reader = ND2Reader
         axes = list('vtzcyx')
+        iter_axes = 'v' if iter_axes=='m' else iter_axes
     else:
         raise ValueError('Only "ND2SDK" and "python" backends are available.')
+
+    if not iter_axes in axes:
+        raise ValueError(f'Supplied iter_axes \'{iter_axes}\' not in axes options for backend \'{backend}\' ({axes})')
 
     with reader(f) as nd2:
         nd2.iter_axes = iter_axes
