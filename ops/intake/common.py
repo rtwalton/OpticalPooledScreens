@@ -7,7 +7,7 @@ from ops.filenames import name_file as name
 from ops.filenames import parse_filename as parse
 from ops.io import save_stack as save
 
-from pims import ND2_Reader
+from pims import ND2Reader_SDK
 from nd2reader import ND2Reader
 
 from ops.constants import *
@@ -200,12 +200,25 @@ def export_nd2_sdk_file_table(f_nd2, df_files):
 
 ## user-defined nd2 reader backend
 
+def read_nd2(f,slicer=slice(None),backend='ND2SDK'):
+    if backend == 'ND2SDK':
+        reader = ND2Reader_SDK
+    elif backend == 'python':
+        reader = ND2Reader
+    else:
+        raise ValueError('Only "ND2SDK" and "python" backends are available.')
+
+    with reader(f) as nd2:
+        data = np.array(nd2[slicer])
+
+    return data
+
 def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_description=None, split=False, backend='ND2SDK',**kwargs):
     if f_description is None:
         f_description = parse_nd2_filename(f)
 
     if backend == 'ND2SDK':
-        reader = ND2_Reader
+        reader = ND2Reader_SDK
         axes = list('mtzcyx')
         iter_axes = 'm' if iter_axes=='v' else iter_axes
     elif backend == 'python':
@@ -219,16 +232,17 @@ def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_descr
         raise ValueError(f'Supplied iter_axes \'{iter_axes}\' not in axes options for backend \'{backend}\' ({axes})')
 
     with reader(f) as nd2:
-        nd2.iter_axes = iter_axes
-        nd2.bundle_axes = [ax for ax in axes if (ax in nd2.axes) & (ax != iter_axes)]
-        if project_axes:
-            g = lambda x: x.max(axis=nd2.bundle_axes.index(project_axes))
-            axes.remove(project_axes)
-        else:
-            g = lambda x: x
-
         if split:
+            nd2.iter_axes = iter_axes
+            nd2.bundle_axes = [ax for ax in axes if (ax in nd2.axes) & (ax != iter_axes)]
+            if project_axes:
+                g = lambda x: x.max(axis=nd2.bundle_axes.index(project_axes))
+                axes.remove(project_axes)
+            else:
+                g = lambda x: x
+            print(axes)
             axes.remove(nd2.iter_axes[0])
+            # preserve inner singleton dimensions
             axes = [ax in nd2.bundle_axes for ax in axes]
             axes = axes[axes.index(True):]
             for site,data in enumerate(nd2[slicer]):
@@ -237,9 +251,15 @@ def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_descr
                     data[tuple([slice(None) if ax else None for ax in axes])], 
                     **kwargs)
         else:
-            axes = [ax in nd2.axes for ax in axes]
+            axes_exist = [ax for ax in axes if ax in nd2.axes]
+            nd2.iter_axes = axes_exist[0]
+            nd2.bundle_axes = axes_exist[1:]
+            if project_axes:
+                data = np.max(nd2,axis=axes_exist.index(project_axes))
+                axes_exist.remove(project_axes)
+            # preserve inner singleton dimensions
+            axes = [ax in axes_exist for ax in axes]
             axes = axes[axes.index(True):]
-            data = np.array([g(data) for data in nd2[slicer]])
             save(name(f_description, ext='tif'),
                 data[tuple([slice(None) if ax else None for ax in axes])], 
                 **kwargs)
