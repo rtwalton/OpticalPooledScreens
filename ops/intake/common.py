@@ -203,12 +203,17 @@ def export_nd2_sdk_file_table(f_nd2, df_files):
 def read_nd2(f,slicer=slice(None),backend='ND2SDK'):
     if backend == 'ND2SDK':
         reader = ND2Reader_SDK
+        axes = list('mtzcyx')
     elif backend == 'python':
         reader = ND2Reader
+        axes = list('vtzcyx')
     else:
         raise ValueError('Only "ND2SDK" and "python" backends are available.')
 
     with reader(f) as nd2:
+        exist_axes = [ax for ax in axes if ax in nd2.axes]
+        nd2.iter_axes = exist_axes[0]
+        nd2.bundle_axes = exist_axes[1:]
         data = np.array(nd2[slicer])
 
     return data
