@@ -568,17 +568,20 @@ texture_features_multichannel = {
 	# and their complement. The first 9 features are the "realest" PFTAS statistics.
 	'pftas' : lambda r: np.array([masked_pftas(channel) 
 		for channel in np.moveaxis(r.intensity_image.reshape(*r.intensity_image.shape[:2],-1),-1,0)]).flatten(order='F'),
-	'haralick_5'  : lambda r: np.array([ubyte_haralick(channel, ignore_zeros=True, distance=5,  return_mean=True)
-		for channel in np.moveaxis(r.intensity_image.reshape(*r.intensity_image.shape[:2],-1),-1,0)]).flatten(order='F')
-	# haralick computational cost increasing significantly with distance; just keep local 5 pixel texture here for most uses.
-	# 'haralick_10' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=10, return_mean=True),
-	# 'haralick_20' : lambda r: ubyte_haralick(r.intensity_image, ignore_zeros=True, distance=20, return_mean=True)
+	# 'haralick_5'  : lambda r: np.array([ubyte_haralick(channel, ignore_zeros=True, distance=5,  return_mean=True)
+	# 	for channel in np.moveaxis(r.intensity_image.reshape(*r.intensity_image.shape[:2],-1),-1,0)]).flatten(order='F'),
+	# # haralick computational cost increasing significantly with distance; just keep local 5 pixel texture here for most uses.
+	'haralick_10'  : lambda r: np.array([ubyte_haralick(channel, ignore_zeros=True, distance=10,  return_mean=True)
+		for channel in np.moveaxis(r.intensity_image.reshape(*r.intensity_image.shape[:2],-1),-1,0)]).flatten(order='F'),
+	# 'haralick_20'  : lambda r: np.array([ubyte_haralick(channel, ignore_zeros=True, distance=20,  return_mean=True)
+	# 	for channel in np.moveaxis(r.intensity_image.reshape(*r.intensity_image.shape[:2],-1),-1,0)]).flatten(order='F')
 }
 
 texture_columns_multichannel = {
 	'pftas':[f'pftas_{n}' for n in range(54)],
-	'haralick_5':[f'haralick_5_{n}' for n in range(13)]
-	
+	# 'haralick_5':[f'haralick_5_{n}' for n in range(13)],
+	'haralick_10':[f'haralick_10_{n}' for n in range(13)],
+	# 'haralick_20':[f'haralick_20_{n}' for n in range(13)]
 }
 
 ######################################################################################################################################
