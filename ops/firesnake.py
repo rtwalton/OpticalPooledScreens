@@ -31,9 +31,16 @@ class Snake():
     """
 
     @staticmethod
-    def _apply_illumination_correction(data, correction, n_jobs=1, backend='threading'):
+    def _apply_illumination_correction(data, correction=None, rolling_ball=False, rolling_ball_kwargs={},
+        n_jobs=1, backend='threading'):
         if n_jobs == 1:
-            return (data/correction).astype(np.uint16)
+            if correction is not None:
+                data = (data/correction).astype(np.uint16)
+            if rolling_ball:
+                data = ops.process.subtract_background(data,**rolling_ball_kwargs).astype(np.uint16)
+
+            return data
+
         else:
             return ops.utils.applyIJ_parallel(Snake._apply_illumination_correction,
                 arr=data,
@@ -105,6 +112,7 @@ class Snake():
 
             data = np.array(arr)
         else:
+            # TODO: creating a "ragged" array here is deprecated in numpy
             data = np.array(data)
 
         # if number of channels varies across cycles
@@ -538,7 +546,7 @@ class Snake():
                 .pipe(ops.in_situ.call_cells_mapping,df_pool))
 
     @staticmethod
-    def _extract_features(data, labels, wildcards, features=None,multichannel=False,**kwargs):
+    def _extract_features(data, labels, wildcards, features=None,multichannel=False):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -558,7 +566,7 @@ class Snake():
         return df
 
     @staticmethod
-    def _extract_timelapse_features(data, labels, wildcards, features=None,**kwargs):
+    def _extract_timelapse_features(data, labels, wildcards, features=None):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -570,7 +578,7 @@ class Snake():
         return pd.concat(arr).rename(columns={'label':'cell'})
 
     @staticmethod
-    def _extract_features_bare(data, labels, features=None, wildcards=None, multichannel=False, **kwargs):
+    def _extract_features_bare(data, labels, features=None, wildcards=None, multichannel=False):
         """Extracts features in dictionary and combines with generic region
         features.
         """
@@ -600,11 +608,12 @@ class Snake():
 
         features_n = {k + '_nuclear': v for k,v in features_n.items()}
         features_c = {k + '_cell': v    for k,v in features_c.items()}
+        features_c.update({'area': lambda r: r.area})
 
         df_n = (Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
             .rename(columns={'area': 'area_nuclear'}))
 
-        df_c =  (Snake._extract_features(data_phenotype, cells, wildcards, features_c)
+        df_c =  (Snake._extract_features_bare(data_phenotype, cells, wildcards, features_c)
             .drop(['i', 'j'], axis=1).rename(columns={'area': 'area_cell'}))
 
 
@@ -643,12 +652,11 @@ class Snake():
 
         features_n = {k + '_nuclear': v for k,v in features_n.items()}
         features_c = {k + '_cell': v    for k,v in features_c.items()}
-        features_c.update({'area': lambda r: r.area})
 
         df_n = (Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
             .rename(columns={'area': 'area_nuclear'}))
 
-        df_c =  (Snake._extract_features_bare(data_phenotype, cells, wildcards, features_c)
+        df_c =  (Snake._extract_features(data_phenotype, cells, wildcards, features_c)
             .drop(['i', 'j'], axis=1).rename(columns={'area': 'area_cell'}))
 
 
