@@ -325,6 +325,41 @@ class Snake():
 
         return remove_border(labels,~mask)
 
+    @staticmethod
+    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, cellpose_kwargs=dict()):
+        from ops.cellpose import segment_cellpose_rgb#,segment_cellpose
+
+        # return segment_cellpose(data[dapi_index], data[cyto_index],
+        #                 nuclei_diameter=diameter, cell_diameter=diameter)
+
+        rgb = Snake._prepare_cellpose(data, dapi_index, cyto_index)
+        nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, **cellpose_kwargs)
+        return nuclei, cells
+        
+    @staticmethod
+    def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True):
+        """Export three-channel RGB image for use with cellpose GUI (e.g., to select
+        cell diameter). Nuclei are exported to blue (cellpose channel=3), cytoplasm to
+        green (cellpose channel=2).
+
+        Unfortunately the cellpose GUI sometimes has issues loading tif files, so this 
+        exports to PNG, which has limited dynamic range. Cellpose performs internal 
+        scaling based on 10th and 90th percentiles of the input.
+        """
+        from ops.cellpose import image_log_scale
+        from skimage import img_as_ubyte
+        dapi = data[dapi_index]
+        cyto = data[cyto_index]
+        blank = np.zeros_like(dapi)
+        if logscale:
+            cyto = image_log_scale(cyto)
+        cyto = cyto/cyto.max() # for ubyte conversion
+        dapi_upper = np.percentile(dapi, 99.5)
+        dapi = dapi / dapi_upper
+        dapi[dapi > 1] = 1
+        red, green, blue = img_as_ubyte(blank), img_as_ubyte(cyto), img_as_ubyte(dapi)
+        return np.array([red, green, blue]).transpose([1, 2, 0])
+
     # @staticmethod
     # def _segment_cells_tubulin(data, nuclei, threshold, area_min, area_max, radius=15,
     #     method='otsu', tubulin_channel=1, remove_boundary_cells=False, **kwargs):
