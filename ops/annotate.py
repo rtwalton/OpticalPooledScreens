@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import skimage.morphology
 import warnings
+from itertools import count
 import os
 import PIL.Image
 import PIL.ImageFont
@@ -13,12 +14,14 @@ import ops.io
 
 
 # load font
-VISITOR_PATH = os.path.join(os.path.dirname(ops.__file__), 'visitor1.ttf')
-try:
-    VISITOR_FONT = PIL.ImageFont.truetype(VISITOR_PATH)
-except OSError as e:
-    warnings.warn('visitor font not found at {0}'.format(VISITOR_PATH))
+def load_visitor_font(size=10):
+    VISITOR_PATH = os.path.join(os.path.dirname(ops.__file__), 'visitor1.ttf')
+    try:
+        return PIL.ImageFont.truetype(VISITOR_PATH,size=size)
+    except OSError as e:
+        warnings.warn('visitor font not found at {0}'.format(VISITOR_PATH))
 
+VISITOR_FONT = load_visitor_font()
 
 def annotate_labels(df, label, value, label_mask=None, tag='cells', outline=False):
     """Transfer `value` from dataframe `df` to a saved integer image mask, using 
@@ -94,17 +97,18 @@ def relabel_array(arr, new_label_dict):
     return arr_[arr]
 
 
-def outline_mask(arr, direction='outer'):
+def outline_mask(arr, direction='outer', width=1):
     """Remove interior of label mask in `arr`.
     """
+    selem = skimage.morphology.disk(width)
     arr = arr.copy()
     if direction == 'outer':
-        mask = skimage.morphology.erosion(arr)
+        mask = skimage.morphology.erosion(arr, selem)
         arr[mask > 0] = 0
         return arr
     elif direction == 'inner':
-        mask1 = skimage.morphology.erosion(arr) == arr
-        mask2 = skimage.morphology.dilation(arr) == arr
+        mask1 = skimage.morphology.erosion(arr, selem) == arr
+        mask2 = skimage.morphology.dilation(arr, selem) == arr
         arr[mask1 & mask2] = 0
         return arr
     else:
@@ -153,8 +157,75 @@ def build_discrete_lut(colors):
     color_index = color_index_1 + color_index_2
     return colors_to_imagej_lut(colors[color_index, :])
 
+def bitmap_draw_line(image,coords,width=1,dashed=False):
+    """Draw horizontal line, returning an image of same shape.
+    Dashed if requested.
+    """
+    import PIL.ImageDraw
 
-def bitmap_line(s):
+    if (len(coords)>2)&(dashed is not False):
+        raise ValueError('Drawing a dashed line between more than 2 points not supported.')
+    if (coords[0][1]!=coords[1][1])&(dashed is not False):
+        raise ValueError('Drawing a dashed non-horizontal line not supported')
+
+    if image.dtype==np.uint16:
+        mode='I;16'
+    elif image.dtype==np.uint8:
+        mode='L'
+    else:
+        mode='1'
+
+    img = PIL.Image.new(mode, image.shape[:-3:-1])
+    draw = PIL.ImageDraw.Draw(img)
+
+    if dashed:
+        y = coords[0][1]
+        if not isinstance(dashed,list):
+            dashed = [100,50] # dash, gap
+        xs = []
+        x = coords[0][0]
+        counter = count(start=0,step=1)
+        while x<coords[1][0]:
+            xs.append(x)
+            c = next(counter)
+            if c%2==0:
+                x+=dashed[0]
+            else:
+                x+=dashed[1]
+        xs.append(coords[1][0])
+        for x_0,x_1 in zip(xs[::2],xs[1::2]):
+            draw.line([(x_0,y),(x_1,y)],width=width)
+    else:
+        draw.line(coords,width=width)
+
+    return np.array(img)
+
+def bitmap_text_overlay(image,anchor_point,text,size=10):
+    """Draw text in the shape of the given image.
+    """
+    import PIL.ImageDraw
+
+    if image.dtype==np.uint16:
+        mode='L' # PIL has a bug with drawing text on uint16 images
+    elif image.dtype==np.uint8:
+        mode='L'
+    else:
+        mode='1'
+
+    img = PIL.Image.new(mode, image.shape[:-3:-1])
+    draw = PIL.ImageDraw.Draw(img)
+
+    FONT = load_visitor_font(size=size)
+    offset = FONT.getoffset(text)
+
+    draw.text(np.array(anchor_point)-np.array(offset),text,font=FONT,fill='white')
+
+    if image.dtype==np.uint16:
+        return skimage.img_as_uint(np.array(img))
+    else:
+        return np.array(img,dtype=image.dtype)
+
+def bitmap_line(s,crop=True):
     """Draw text using Visitor font (characters are 5x5 pixels).
     """
     import PIL.Image
@@ -165,15 +236,15 @@ def bitmap_line(s):
     draw = PIL.ImageDraw.Draw(img)
 
     n = np.array(img)[2:7, :, 0]
-    if n.sum() == 0:
+    if (n.sum() == 0)|(~crop):
         return n
     return (n[:, :np.where(n.any(axis=0))[0][-1] + 1] > 0).astype(int)
 
 
-def bitmap_lines(lines, spacing=1):
+def bitmap_lines(lines, spacing=1,crop=True):
     """Draw multiple lines of text from a list of strings.
     """
-    bitmaps = [bitmap_line(x) for x in lines]
+    bitmaps = [bitmap_line(x,crop=crop) for x in lines]
     height = 5
     shapes = np.array([x.shape for x in bitmaps])
     shape = (height + 1) * len(bitmaps), shapes[:, 1].max()
