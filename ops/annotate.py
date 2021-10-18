@@ -14,14 +14,18 @@ import ops.io
 
 
 # load font
-def load_visitor_font(size=10):
-    VISITOR_PATH = os.path.join(os.path.dirname(ops.__file__), 'visitor1.ttf')
+def load_truetype(truetype='visitor1.ttf',size=10):
+    """
+    Note that `size` here is the "em" size in pixels, which is different than 
+    the actual height of the letters for most fonts.
+    """
+    PATH = os.path.join(os.path.dirname(ops.__file__), truetype)
     try:
-        return PIL.ImageFont.truetype(VISITOR_PATH,size=size)
+        return PIL.ImageFont.truetype(PATH,size=size)
     except OSError as e:
-        warnings.warn('visitor font not found at {0}'.format(VISITOR_PATH))
+        warnings.warn('TrueType font not found at {0}'.format(PATH))
 
-VISITOR_FONT = load_visitor_font()
+VISITOR_FONT = load_truetype()
 
 def annotate_labels(df, label, value, label_mask=None, tag='cells', outline=False):
     """Transfer `value` from dataframe `df` to a saved integer image mask, using 
@@ -170,13 +174,16 @@ def bitmap_draw_line(image,coords,width=1,dashed=False):
 
     if image.dtype==np.uint16:
         mode='I;16'
+        fill = 2**16-1
     elif image.dtype==np.uint8:
         mode='L'
+        fill = 2**8-1
     else:
         mode='1'
+        fill = True
 
     img = PIL.Image.new(mode, image.shape[:-3:-1])
-    draw = PIL.ImageDraw.Draw(img)
+    draw = PIL.ImageDraw.Draw(img,mode=mode)
 
     if dashed:
         y = coords[0][1]
@@ -194,13 +201,13 @@ def bitmap_draw_line(image,coords,width=1,dashed=False):
                 x+=dashed[1]
         xs.append(coords[1][0])
         for x_0,x_1 in zip(xs[::2],xs[1::2]):
-            draw.line([(x_0,y),(x_1,y)],width=width)
+            draw.line([(x_0,y),(x_1,y)],width=width,fill=fill)
     else:
-        draw.line(coords,width=width)
+        draw.line(coords,width=width,fill=fill)
 
     return np.array(img)
 
-def bitmap_text_overlay(image,anchor_point,text,size=10):
+def bitmap_text_overlay(image,anchor_point,text,size=10,font=VISITOR_FONT):
     """Draw text in the shape of the given image.
     """
     import PIL.ImageDraw
@@ -215,7 +222,14 @@ def bitmap_text_overlay(image,anchor_point,text,size=10):
     img = PIL.Image.new(mode, image.shape[:-3:-1])
     draw = PIL.ImageDraw.Draw(img)
 
-    FONT = load_visitor_font(size=size)
+    if isinstance(font,PIL.ImageFont.FreeTypeFont):
+        FONT = font
+        if FONT.size != size:
+            warnings.warn(f'Size of supplied FreeTypeFont object is {FONT.size}, '
+            f'but input argument size = {size}.'
+            )
+    else:
+        FONT = load_truetype(truetype=font,size=size)
     offset = FONT.getoffset(text)
 
     draw.text(np.array(anchor_point)-np.array(offset),text,font=FONT,fill='white')
