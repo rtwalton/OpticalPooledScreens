@@ -227,8 +227,10 @@ def grid_view(files, bounds, padding=40, with_mask=False,im_func=None,memoize=Tr
     # if memoize:
     #     open_hdf_file.keys['active'] = True
     #     read_stack.keys['active'] = True
+    import tqdm.notebook
+    tqdn = tqdm.notebook.tqdm
 
-    for filename, bounds_ in zip(files, bounds):
+    for filename, bounds_ in tqdn(zip(files, bounds)):
         if filename.endswith('hdf'):
             bounds_ = np.array(bounds_)+np.array((-padding,-padding,padding,padding))
             I_cell = im_func(read_hdf_image(filename, bbox=bounds_, memoize=memoize))
@@ -250,6 +252,36 @@ def grid_view(files, bounds, padding=40, with_mask=False,im_func=None,memoize=Tr
         return ops.utils.pile(arr), ops.utils.pile(arr_m)
 
     return ops.utils.pile(arr)
+
+def grid_view_timelapse(filename, frames, bounds, xy_shape=(80,80), memoize=False):
+    """Mask is 1-indexed, zero indicates background.
+    """
+    max_cells = max([len(bound) for bound in bounds])
+    I = np.zeros((len(frames),1,xy_shape[0],xy_shape[1]*max_cells))
+    
+    for frame_count,(frame,timelapse_bounds) in enumerate(zip(frames,bounds)):
+        leading_dims = (slice(frame,frame+1),slice(None))
+        for num,bound in enumerate(timelapse_bounds):
+            data = read_hdf_image(filename, leading_dims=leading_dims, bbox=bound, memoize=memoize)
+#             print((slice(num,num+1),slice(None))+(slice(0,data.shape[-2]),slice(0,data.shape[-1])))
+#             print((slice(frame_count,frame_count+1),slice(None))+(slice(xy_shape[0]*num,(xy_shape[0]*num)+data.shape[-2]),slice(0,data.shape[-1])))
+#             print(data.shape)
+            I[(slice(frame_count,frame_count+1),slice(None))+(slice(0,data.shape[-2]),slice(xy_shape[0]*num,(xy_shape[0]*num)+data.shape[-1]))] = data
+    return I
+
+def format_input(input_table, n_jobs=1, **kwargs):
+    df = pd.read_excel(input_table)
+    
+    def process_site(output_file,df_input):
+        stacked = np.array([read_stack(input_file) for input_file in df_input.sort_values('channel')['original filename']])
+        save_stack(output_file,stacked)
+        
+    if n_jobs != 1:
+        from joblib import Parallel, delayed
+        Parallel(n_jobs=n_jobs, **kwargs)(delayed(process_site)(output_file,df_input) for output_file,df_input in df.groupby('snakemake filename'))
+    else:
+        for output_file,df_input in df.groupby('snakemake filename'):
+            process_site(output_file,df_input)
 
 
 @ops.utils.memoize(active=False)
