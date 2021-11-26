@@ -62,7 +62,7 @@ class AffinityLeiden(sklearn.base.BaseEstimator, sklearn.base.ClusterMixin):
             random_state=self.random_state,
         )
 
-        self.affinity_matrix_ = graph.diff_op.todense()
+        self.affinity_matrix_ = graph.diff_op.toarray()
 
         affinity_igraph = Graph().Weighted_Adjacency(
             matrix=self.affinity_matrix_.tolist(), mode="undirected"
@@ -110,7 +110,6 @@ class AffinityLeiden(sklearn.base.BaseEstimator, sklearn.base.ClusterMixin):
 
     def adjusted_rand_score(self, s):
         return sklearn.metrics.adjusted_rand_score(self.labels_, s[self.index].values)
-
 
 def consensus_matrix(
     dfs, column="cluster", weights=None, combine_nt=False, nt_threshold=1

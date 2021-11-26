@@ -15,6 +15,8 @@ import pandas as pd
 def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1):
     files = glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
 
+    from tqdm.notebook import tqdm
+
     def get_file(f):
         try:
             return pd.read_csv(f)
@@ -23,7 +25,7 @@ def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1):
 
     if n_jobs != 1:
         from joblib import Parallel,delayed
-        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file) for file in files)
+        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file) for file in tqdm(files))
     else:
         arr = [get_file(file) for file in files]
 
@@ -32,6 +34,20 @@ def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1):
         df.to_csv(tag+'.csv')
     else:
         df.to_hdf(tag + '.hdf', tag, mode='w')
+
+def format_input(input_table, n_jobs=1, **kwargs):
+    df = pd.read_excel(input_table)
+    
+    def process_site(output_file,df_input):
+        stacked = np.array([read(input_file) for input_file in df_input.sort_values('channel')['original filename']])
+        save(output_file,stacked)
+        
+    if n_jobs != 1:
+        from joblib import Parallel, delayed
+        Parallel(n_jobs=n_jobs, **kwargs)(delayed(process_site)(output_file,df_input) for output_file,df_input in df.groupby('snakemake filename'))
+    else:
+        for output_file,df_input in df.groupby('snakemake filename'):
+            process_site(output_file,df_input)
 
 def memoize(active=True, copy_numpy=True):
     """The memoized function has attributes `cache`, `keys`, and `reset`. 
