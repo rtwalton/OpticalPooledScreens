@@ -7,7 +7,10 @@ from ops.filenames import name_file as name
 from ops.filenames import parse_filename as parse
 from ops.io import save_stack as save
 
-from pims import ND2Reader_SDK
+try:
+    from pims import ND2Reader_SDK
+except:
+    from pims import ND2_Reader as ND2Reader_SDK
 from nd2reader import ND2Reader
 
 from ops.constants import *
@@ -123,32 +126,47 @@ def get_metadata_at_coords(nd2, **coords):
                     'y_um': nd2._buf_md.dYPos,
                     'z_um': nd2._buf_md.dZPos,
                     't_ms': nd2._buf_md.dTimeMSec,
-                }    
+                }
+
+def get_axis_size(nd2,axis):
+    try:
+        size = list(range(nd2.sizes[axis]))
+    except:
+        size = [0]
+    return size
 
 def extract_nd2_metadata_sdk(f, interpolate=True, progress=None):
     """Interpolation fills in timestamps linearly for each well; x,y,z positions 
     are copied from the first time point. 
     """
-    with ND2_Reader(f) as nd2:
-
-        ts = range(nd2.sizes['t'])
-        ms = range(nd2.sizes['m'])   
+    with ND2Reader_SDK(f) as nd2:
+        ts = get_axis_size(nd2,'t')
+        ms = get_axis_size(nd2,'m')
+        zs = get_axis_size(nd2,'z')   
 
         if progress is None:
             progress = lambda x: x
 
-        arr = []
-        for t, m in progress(list(product(ts, ms))):
-            boundaries = [0, nd2.sizes['m'] - 1]
-            skip = m not in boundaries and t > 0
-            if interpolate and skip:
-                metadata = {}
-            else:
-                metadata = get_metadata_at_coords(nd2, t=t, m=m)
-            metadata['t'] = t
-            metadata['m'] = m
-            metadata['file'] = f
-            arr += [metadata]
+        if len(ts)==len(ms)==len(zs)==0:
+            arr = [get_metadata_at_coords(nd2)]
+        else:
+            arr = []
+            for t, m, z in progress(list(product(ts, ms, zs))):
+                if len(ms)>1:
+                    boundaries = [0, nd2.sizes['m'] - 1]
+                    skip = m not in boundaries and t > 0
+                else:
+                    skip=False
+                if interpolate and skip:
+                    metadata = {}
+                else:
+                    metadata = get_metadata_at_coords(nd2, t=t, m=m, z=z)
+                metadata['t'] = t
+                metadata['m'] = m
+                metadata['z'] = z
+                metadata['file'] = f
+                metadata.update()
+                arr += [metadata]
     
         
     df_info = pd.DataFrame(arr)
@@ -189,7 +207,7 @@ def export_nd2_sdk_file_table(f_nd2, df_files):
 
     df = df_files.drop_duplicates('file_')
 
-    with ND2_Reader(f_nd2) as nd2:
+    with ND2Reader_SDK(f_nd2) as nd2:
 
         nd2.iter_axes = 'm'
         nd2.bundle_axes = ['t', 'c', 'y', 'x']

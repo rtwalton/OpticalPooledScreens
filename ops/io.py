@@ -102,6 +102,7 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Fa
                     (r'(?P<cycle>c[0-9]+)?/?'
                     '(?P<dataset>.*)?/?'
                     'Well(?P<well>[A-H][0-9]*)_'
+                    '(Point[A-H][0-9]+_(?P<site>[0-9]*)_)?'
                     'Channel((?P<channel_1>[^_,]+)(_[^,]*)?)?,?'
                     '((?P<channel_2>[^_,]+)(_[^,]*)?)?,?'
                     '((?P<channel_3>[^_,]+)(_[^,]*)?)?,?'
@@ -114,6 +115,10 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Fa
     description = ops.filenames.parse_filename(file,custom_patterns=file_pattern)
     description['ext']='tif'
     description['mag']=mag
+
+    if 'site' in description.keys():
+        description['site']=str(int(description['site']))
+
     try:
         description['subdir']='preprocess/'+description['cycle']
     except:
@@ -132,7 +137,7 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Fa
         filename = ops.filenames.name_file(description,site=str(site))
         save_stack(filename,image[:])
 
-        metadata = {'filename':ops.filenames.name_file(description,site=str(site)),
+        metadata = {'filename':filename,
         'field_of_view':site,
         'x':image.metadata['x_data'][site],
         'y':image.metadata['y_data'][site],
@@ -143,7 +148,26 @@ def nd2_to_tif(file,mag='10X',zproject=False,fov_axes='cxy',n_threads=1, tqdm=Fa
         return metadata
 
     with ND2Reader(file) as images:
-        images.iter_axes='v'
+        try:
+            images.iter_axes='v'
+        except:
+            images.bundle_axes=fov_axes
+            if zproject:
+                z_axis = fov_axes.find('z')
+                images = images.max(axis=z_axis)
+            filename = ops.filenames.name_file(description)
+            save_stack(filename,images.get_frame(0))
+
+            metadata = {'filename':filename,
+            'field_of_view':description['site'],
+            'x':images.metadata['x_data'][0],
+            'y':images.metadata['y_data'][0],
+            'z':images.metadata['z_data'],
+            'pfs_offset':images.metadata['pfs_offset'][0],
+            'pixel_size':images.metadata['pixel_microns']
+            }
+            return metadata
+
         images.bundle_axes = fov_axes
 
         if sites=='all':
