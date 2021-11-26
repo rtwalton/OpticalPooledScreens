@@ -1,6 +1,6 @@
 ## Optical Pooled Screens of Essential Genes
 
-Code and computational tools for the publication [*The phenotypic landscape of essential human genes*].
+Code and computational tools for the publication *The phenotypic landscape of essential human genes*.
 
 For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our upcoming protocol paper: https://github.com/feldman4/OpticalPooledScreens.
 
@@ -10,7 +10,7 @@ This repository contains application-specific resources for our study of essenti
 
 Note: refactoring in progress.
 
-### Installation (OSX)
+## Installation (OSX)
 
 **WARNING: many versions of dependencies will have trouble installing on Python 3.8. It is currently recommended to use Python 3.6. Setting up a Python 3.6 conda environment may be a convenient solution, set-up guide [here](https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#managing-python).**
 
