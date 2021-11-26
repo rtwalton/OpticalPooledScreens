@@ -1,12 +1,18 @@
-## Optical Pooled Screens
+## Optical Pooled Screens of Essential Genes
 
-Example _in situ_ sequencing-by-synthesis data (in `example_data/`) and analysis code (in `ops/`) for the publication [*Optical pooled screens in human cells*](https://doi.org/10.1016/j.cell.2019.09.016).
+Code and computational tools for the publication [*The phenotypic landscape of essential human genes*].
 
-We are currently in the process of depositing complete screening datasets (paired in situ sequencing and p65 translocation phenotyping) in the [Cell-IDR database](https://idr.openmicroscopy.org/about/studies.html).
+For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our upcoming protocol paper: https://github.com/feldman4/OpticalPooledScreens.
 
-**WARNING: many versions of dependencies will have trouble installing on Python 3.8. It is currently recommended to use Python 3.6. Setting up a Python 3.6 conda environment may be a convenient solution, set-up guide [here](https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#managing-python).**
+## More about this repository
+
+This repository contains application-specific resources for our study of essential gene function using optical pooled screens.
+
+Note: refactoring in progress.
 
 ### Installation (OSX)
+
+**WARNING: many versions of dependencies will have trouble installing on Python 3.8. It is currently recommended to use Python 3.6. Setting up a Python 3.6 conda environment may be a convenient solution, set-up guide [here](https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#managing-python).**
 
 Download the OpticalPooledScreens directory (e.g., on Github use the green "Clone or download" button, then "Download ZIP").
 
