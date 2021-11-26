@@ -6,7 +6,11 @@ For new projects using optical pooled screens, it is highly recommended to use t
 
 ## More about this repository
 
-This repository contains application-specific resources for our study of essential gene function using optical pooled screens.
+This repository contains additional application-specific resources for our study of essential gene function using optical pooled screens.
+
+This includes:
+- Many morphological features implemented as functions operating on scikit-image RegionProps objects (features come from CellProfiler and additional sources)
+- Functions for analyzing live-cell optical pooled screens (using TrackMate for cell tracking)
 
 Note: refactoring in progress.
 
