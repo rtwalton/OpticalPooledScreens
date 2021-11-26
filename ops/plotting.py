@@ -1,6 +1,6 @@
 import seaborn as sns
 import numpy as np
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # warning: need matplotlib >= 3.3.3 for symlog to work properly
 from matplotlib.ticker import SymmetricalLogLocator, FixedLocator
 import pandas as pd
 from ops.io import GLASBEY
@@ -28,17 +28,20 @@ def volcano(
     y="pval",
     alpha_level=0.05,
     change=0,
-    annotate=None,
     prelog=True,
     xscale=None,
     control_query=None,
+    annotate_query=None,
+    annotate_labels=False,
     high_color='green',
     low_color='magenta',
     default_color='gray',
-    threshold_kwargs=dict(color="gray", linestyle="--"),
-    control_kwargs=dict(color=sns.color_palette()[1],label="non-targeting guides"),
+    control_color=sns.color_palette()[1],
+    threshold_kwargs=dict(),
+    annotate_kwargs=dict(),
     ax=None,
     rasterized=True,
+    adjust_labels=True,
     **kwargs
 ):
 
@@ -64,6 +67,9 @@ def volcano(
         # negative fails for None
         except:
             change = [change, change]
+
+    _ = threshold_kwargs.setdefault('color','gray')
+    _ = threshold_kwargs.setdefault('linestyle','--')
 
     # None in `change` -> nothing marked marked as significant in that direction
     # if both elements of `change` are None, everything marked as significant
@@ -91,36 +97,65 @@ def volcano(
         alpha_level = -np.log10(alpha_level)
 
     if control_query is not None:
-        df_control = df_.query(control_query)
-        df_ = df_[~(df_.index.isin(df_control.index))]
+        # df_control = df_.query(control_query)
+        # df_ = df_[~(df_.index.isin(df_control.index))]
+        df_.loc[df_.index.isin(df_.query(control_query).index),"significant"] = "control"
+
+    if annotate_query is not None:
+        df_annotate = df_.query(annotate_query)
 
     sns.scatterplot(
         data=df_,
         x=x,
         y=y,
         hue="significant",
-        hue_order=["high", False, "low"],
-        palette=[high_color, default_color, low_color],
+        hue_order=["high", False, "low", "control"],
+        palette=[high_color, default_color, low_color, control_color],
         legend=None,
         ax=ax,
         rasterized=rasterized,
         **kwargs
     )
 
-    if control_query is not None:
-        kwargs.update(control_kwargs)
+    # if control_query is not None:
+    #     kwargs_ = kwargs.copy()
+    #     kwargs_.update(control_kwargs)
+    #     sns.scatterplot(
+    #         data=df_control,
+    #         x=x,
+    #         y=y,
+    #         ax=ax,
+    #         rasterized=rasterized,
+    #         **kwargs_,
+    #     )
+
+    if annotate_query is not None:
+        kwargs_ = kwargs.copy()
+        kwargs_.update(annotate_kwargs)
+        hue = kwargs_.pop('hue','significant')
+        if hue=="significant":
+            hue_order = kwargs_.pop('hue_order',['high',False,'low','control'])
+            palette = kwargs_.pop('palette',[high_color, default_color, low_color,control_color])
+        else:
+            hue_order =  kwargs_.pop('hue_order',None)
+            palette = kwargs_.pop('palette',None)
         sns.scatterplot(
-            data=df_control,
+            data=df_annotate,
             x=x,
             y=y,
             ax=ax,
+            hue=hue,
+            hue_order=hue_order,
+            palette=palette,
+            legend=None,
             rasterized=rasterized,
-            **kwargs,
-            # **control_kwargs,
+            **kwargs_,
         )
-
-    # sns.scatterplot(data=df_.query('gene_symbol==@annotate_labels'),x=x,
-    #                 y=y,hue='significant',hue_order=['high','low'],palette=['green','magenta'],edgecolor='black',ax=ax)
+        if annotate_labels:
+            labels = []
+            for _,entry in df_annotate.iterrows():
+                labels.append(ax.annotate(entry[annotate_labels],(entry[x],entry[y]),
+                    arrowprops=dict(arrowstyle='-',relpos=(0,0),shrinkA=0,shrinkB=0)))
 
     if not prelog:
         ax.set_yscale("log", basey=10)
@@ -137,25 +172,6 @@ def volcano(
     if xscale == "symlog":
         ax = symlog_axis(df_[x],ax,'x')
 
-    if annotate is not None:
-	    for gene,data in df_.query('significant=="low"').nlargest(annotate,y).iterrows():
-	    	ax.annotate(gene,(data[x],data[y]),
-	    		textcoords='offset points',
-	    		ha='right',
-	    		xytext=(-5,0)
-	    		)
-	    for gene,data in df_.query('significant=="high"').nlargest(annotate,y).iterrows():
-	    	ax.annotate(gene,(data[x],data[y]),
-	    		textcoords='offset points',
-	    		ha='left',
-	    		xytext=(5,0)
-	    		)
-
-    # for y_offset,alignment,label in annotate:
-    #     s = df_.query('gene_symbol==@label').iloc[0]
-    #     ax.text(s[x],s[y]+y_offset,
-    #             label,horizontalalignment=alignment,fontsize=12)
-
     ax.axhline(alpha_level, **threshold_kwargs)
 
     ax.set_xlabel(" ".join(x.split("_")))
@@ -163,6 +179,12 @@ def volcano(
         ax.set_ylabel("-log10(p-value)")
     else:
         ax.set_ylabel("p-value")
+
+    if adjust_labels:
+        try:
+            adjust_text(labels,df_[x].values,df_[y].values,ax=ax,force_text=(0.1,0.05),force_points=(0.01,0.025))
+        except:
+            pass
 
     return ax
 
@@ -176,9 +198,10 @@ def two_feature(
     xscale=None,
     yscale=None,
     control_query=None,
-    control_kwargs=dict(color=sns.color_palette()[1],label="non-targeting guides"),
+    control_kwargs=dict(),
     ax=None,
     rasterized=True,
+    adjust_labels=True,
     **kwargs
 ):
 
@@ -198,13 +221,14 @@ def two_feature(
         data=df_,
         x=x,
         y=y,
-        legend=None,
+        # legend=None,
         ax=ax,
         rasterized=rasterized,
         **kwargs
     )
 
     if control_query is not None:
+        _ = control_kwargs.setdefault('color',sns.color_palette()[1])
         kwargs_ = kwargs.copy()
         kwargs_.update(control_kwargs)
         sns.scatterplot(
@@ -218,6 +242,8 @@ def two_feature(
 
     if annotate_query is not None:
         kwargs_ = kwargs.copy()
+        _ = annotate_kwargs.setdefault('edgecolor','black')
+        _ = annotate_kwargs.setdefault('alpha',1)
         kwargs_.update(annotate_kwargs)
         sns.scatterplot(
             data=df_annotate,
@@ -242,10 +268,11 @@ def two_feature(
     ax.set_xlabel(" ".join(x.split("_")))
     ax.set_ylabel(" ".join(y.split("_")))
 
-    try:
-        adjust_text(labels,df_[x].values,df_[y].values)
-    except:
-        pass
+    if adjust_labels:
+        try:
+            adjust_text(labels,df_[x].values,df_[y].values,ax=ax,force_text=(0.1,0.05),force_points=(0.01,0.025))
+        except:
+            pass
 
     return ax
 
@@ -313,6 +340,7 @@ def dimensionality_reduction(
         )
 
     if label_query is not None:
+        n_colors = 1
         if label_hue is not None:
             n_colors = df_label[label_hue].nunique()
 
@@ -347,6 +375,7 @@ def dimensionality_reduction(
         )
 
         if label_legend:
+            loc = legend_kwargs.pop('loc',(1.05,0.33))
             if label_as_cmap:
                 hue_norm = kwargs.get(
                     'hue_norm',
@@ -361,10 +390,10 @@ def dimensionality_reduction(
                     plt.scatter([],[],marker='o',s=s,color=c,
                         linewidth=0.5,edgecolor='k',label=str(cl)) 
                     for c,cl in zip(legend_colors,legend_color_vals)]
-                ax.legend(handles=legend_elements, loc=(1.05,0.33), ncol=1, **legend_kwargs)
+                ax.legend(handles=legend_elements, loc=loc, ncol=1, **legend_kwargs)
             else:
                 n_cols=max(1, (n_colors // 20))
-                ax.legend(loc=(1, 0.33), ncol=n_cols,**legend_kwargs)
+                ax.legend(loc=loc, ncol=n_cols,**legend_kwargs)
 
     if hide_axes:
         ax.axis("off")
@@ -375,9 +404,11 @@ def heatmap(
     df,
     figsize=None,
     row_colors=None,
+    col_colors=None,
+    row_palette='Set2',
+    col_palette='Set2',
     label_fontsize=5,
     rasterized=True,
-    dendrogram_ratio=0,
     colors_ratio=0.1,
     spinewidth=0.25,
     alternate_ticks=(True,True),
@@ -385,41 +416,57 @@ def heatmap(
     label_every=(1,1),
     xticklabel_kwargs=dict(),
     yticklabel_kwargs=dict(),
+    xticks_emphasis=[],
+    yticks_emphasis=[],
     **kwargs
     ):
     """Note: weird things happen if you make the heatmap aspect ratio too big/small 
     (e.g., figsize=(1.3,6) looks about the same as (2.7,6)).
     """
-
-    if isinstance(row_colors,str):
-        # assume is a column name
-        row_color_map = {group:color 
-            for group,color 
-            in zip(df[row_colors].unique(),sns.color_palette('Set2',n_colors=df[row_colors].nunique()))}
-        row_colors = df[row_colors].map(row_color_map)
-
-    if row_colors is not None:
-        df = df[[col for col in df.columns if col!=row_colors.name]]
-
-    y_len,x_len = df.shape
-
-    if figsize is None:
-        figsize = np.array([x_len,y_len])*0.08
-        print(figsize)
-    print(figsize)
-    print(x_len,y_len)
-    
     vmin = kwargs.pop('vmin',-5)
     vmax = kwargs.pop('vmax',5)
     col_cluster = kwargs.pop('col_cluster',False)
     row_cluster = kwargs.pop('row_cluster',False)
     cmap = kwargs.pop('cmap','vlag')
     cbar_pos = kwargs.pop('cbar_pos',None)
+    if (col_cluster|row_cluster):
+        dendrogram_ratio = kwargs.pop('dendrogram_ratio',0.1)
+        if dendrogram_ratio==0:
+            raise ValueError('dendrogram_ratio must be greater than zero if clustering rows or columns.')
+    else:
+        dendrogram_ratio = kwargs.pop('dendrogram_ratio',0)
+
+    if isinstance(row_colors,str):
+        # assume is a column name
+        row_color_map = {group:color 
+            for group,color 
+            in zip(df[row_colors].unique(),sns.color_palette(row_palette,n_colors=df[row_colors].nunique()))}
+        row_colors = df[row_colors].map(row_color_map)
+        row_divisions = row_colors.value_counts()[row_colors.unique()].cumsum().values[:-1]
+    if isinstance(col_colors,str):
+        # assume is an index
+        col_color_map = {group:color 
+            for group,color 
+            in zip(df.loc[col_colors].unique(),sns.color_palette(col_palette,n_colors=df.loc[col_colors].nunique()))}
+        col_colors = df.loc[col_colors].map(col_color_map)
+        col_divisions = col_colors.value_counts()[col_colors.unique()].cumsum().values[:-1]
+
+    if row_colors is not None:
+        df = df[[col for col in df.columns if col!=row_colors.name]]
+    if col_colors is not None:
+        df = df.loc[[index!=col_colors.name for index in df.index]]
+
+    y_len,x_len = df.shape
+
+    if figsize is None:
+        figsize = np.array([x_len,y_len])*0.08
+    
 
     cg = sns.clustermap(
         df,
         figsize=figsize,
         row_colors=row_colors,
+        col_colors=col_colors,
         vmin=vmin,
         vmax=vmax,
         col_cluster=col_cluster,
@@ -435,8 +482,13 @@ def heatmap(
     cg.gs.update(hspace=0,wspace=0) # remove space between subplots
     # remove color axis ticks
     if row_colors is not None:
-    # cg.ax_col_colors.set_yticks([])
         cg.ax_row_colors.set_xticks([])
+        if not row_cluster:
+            [cg.ax_heatmap.axhline(d,color='black',linestyle='--',linewidth=0.25) for d in row_divisions]
+    if col_colors is not None:
+        cg.ax_col_colors.set_yticks([])
+        if not col_cluster:
+            [cg.ax_heatmap.axvline(d,color='black',linestyle='--',linewidth=0.25) for d in col_divisions]
 
     # remove axis labels
     cg.ax_heatmap.set_ylabel(None)
@@ -452,15 +504,25 @@ def heatmap(
     x_atl,y_atl = alternate_tick_length
     ytickrotation = yticklabel_kwargs.pop('rotation','horizontal')
     xtickrotation = xticklabel_kwargs.pop('rotation','vertical')
+
+    if col_cluster:
+        x_labels = df.columns.get_level_values(0)[cg.dendrogram_col.reordered_ind]
+    else:
+        x_labels = df.columns.get_level_values(0)
+    if row_cluster:
+        y_labels = df.index.get_level_values(0)[cg.dendrogram_row.reordered_ind]
+    else:
+        y_labels = df.index.get_level_values(0)
+
     # set up tick labels, enabling alternating offsets
     cg.ax_heatmap.xaxis.set_major_locator(FixedLocator(np.linspace(0.5,x_len-(x_len-0.5)%(x_le*2),int(np.ceil((x_len-0.5)/(2*x_le))))))
     cg.ax_heatmap.xaxis.set_minor_locator(FixedLocator(np.linspace(0.5+x_le,x_len-(x_len-0.5-x_le)%(x_le*2),int(np.ceil((x_len-0.5-x_le)/(2*x_le))))))
     cg.ax_heatmap.yaxis.set_major_locator(FixedLocator(np.linspace(0.5,y_len-(y_len-0.5)%(y_le*2),int(np.ceil((y_len-0.5)/(2*y_le))))))
     cg.ax_heatmap.yaxis.set_minor_locator(FixedLocator(np.linspace(0.5+y_le,y_len-(y_len-0.5-y_le)%(y_le*2),int(np.ceil((y_len-0.5-y_le)/(2*y_le))))))
-    _ = cg.ax_heatmap.set_yticklabels(df.index.get_level_values(0)[::2*y_le],fontsize=label_fontsize,rotation=ytickrotation,**yticklabel_kwargs)
-    _ = cg.ax_heatmap.set_yticklabels(df.index.get_level_values(0)[y_le::2*y_le],minor=True,fontsize=label_fontsize,rotation=ytickrotation,**yticklabel_kwargs)
-    _ = cg.ax_heatmap.set_xticklabels(df.columns.get_level_values(0)[::2*x_le],fontsize=label_fontsize,rotation=xtickrotation,**xticklabel_kwargs)
-    _ = cg.ax_heatmap.set_xticklabels(df.columns.get_level_values(0)[x_le::2*x_le],minor=True,fontsize=label_fontsize,rotation=xtickrotation,**xticklabel_kwargs)
+    _ = cg.ax_heatmap.set_yticklabels(y_labels[::2*y_le],fontsize=label_fontsize,rotation=ytickrotation,rotation_mode='anchor',**yticklabel_kwargs)
+    _ = cg.ax_heatmap.set_yticklabels(y_labels[y_le::2*y_le],minor=True,fontsize=label_fontsize,rotation=ytickrotation,rotation_mode='anchor',**yticklabel_kwargs)
+    _ = cg.ax_heatmap.set_xticklabels(x_labels[::2*x_le],fontsize=label_fontsize,rotation=xtickrotation,rotation_mode='anchor',**xticklabel_kwargs)
+    _ = cg.ax_heatmap.set_xticklabels(x_labels[x_le::2*x_le],minor=True,fontsize=label_fontsize,rotation=xtickrotation,rotation_mode='anchor',**xticklabel_kwargs)
 
     if y_at:
         cg.ax_heatmap.tick_params(axis='y',which='major',pad=2,length=2)
@@ -471,7 +533,13 @@ def heatmap(
         cg.ax_heatmap.tick_params(axis='x',which='major',pad=2,length=2)
         cg.ax_heatmap.tick_params(axis='x',which='minor',pad=2,length=x_atl)
     else:
-        cg.ax_heatmap.tick_params(axis='x',which='both',pad=2,length=2)
+        cg.ax_heatmap.tick_params(axis='x',which='both',pad=0,length=2)
+
+    if len(xticks_emphasis)>0:
+        # [tick.set_color('red') for tick in cg.ax_heatmap.get_xticklabels(which='both') if tick.get_text() in xticks_emphasis]
+        [tick.set_visible(False) for tick in cg.ax_heatmap.get_xticklabels(which='both') if tick.get_text() in xticks_emphasis]
+    if len(yticks_emphasis)>0:
+        [tick.set_color('red') for tick in cg.ax_heatmap.get_yticklabels(which='both') if tick.get_text() in yticks_emphasis]
 
     return cg
 
@@ -496,10 +564,10 @@ def boxplot_jitter(jitter_ax="x", jitter_range=(-0.25, 0.25), *args, **kwargs):
 
 def symlog_axis(vals,ax,which):
     if which=='x':
-        ax.set_xscale("symlog", linthresh=1, basex=10, subs=np.arange(1, 11))
+        ax.set_xscale("symlog", linthresh=1, base=10, subs=np.arange(1, 11))
         op_ax = ax.xaxis
     elif which=='y':
-        ax.set_yscale("symlog", linthresh=1, basex=10, subs=np.arange(1, 11))
+        ax.set_yscale("symlog", linthresh=1, base=10, subs=np.arange(1, 11))
         op_ax = ax.yaxis
     else:
         raise ValueError(f'which must be one of "x" or "y".')
@@ -562,6 +630,7 @@ def get_cp_feature_table(
     compartments=["cell", "nucleus"],
     channels=["dapi", "tubulin", "gh2ax", "phalloidin"],
     foci_channel="gh2ax",
+    correlation=True,
     neighbor_distances=[1],
 ):
 
@@ -652,51 +721,54 @@ def get_cp_feature_table(
         )
     )
 
-    df_correlation = (
-        pd.DataFrame(
-            [
-                {
-                    "feature_type": feature.rsplit("_", 2)[0],
-                    "level_0": compartment,
-                    "level_1": "correlation",
-                    "level_2": (f"{first}_{second}"),
-                }
-                for feature in correlation_features
-                for compartment in compartments
-                for first, second in combinations(channels, r=2)
-            ]
-        )
-        .drop_duplicates()
-        .assign(
-            feature=lambda x: (
-                x.apply(
-                    lambda x: x[["level_0", "feature_type", "level_2"]].str.cat(
-                        sep="_"
-                    ),
-                    axis=1,
+    if correlation:
+        df_correlation = (
+            pd.DataFrame(
+                [
+                    {
+                        "feature_type": feature.rsplit("_", 2)[0],
+                        "level_0": compartment,
+                        "level_1": "correlation",
+                        "level_2": (f"{first}_{second}"),
+                    }
+                    for feature in correlation_features
+                    for compartment in compartments
+                    for first, second in combinations(channels, r=2)
+                ]
+            )
+            .drop_duplicates()
+            .assign(
+                feature=lambda x: (
+                    x.apply(
+                        lambda x: x[["level_0", "feature_type", "level_2"]].str.cat(
+                            sep="_"
+                        ),
+                        axis=1,
+                    )
                 )
             )
         )
-    )
 
-    df_correlation = pd.concat(
-        [
-            df_correlation,
-            (
-                df_correlation.query(
-                    'feature_type in ["K","manders","rwc","lstsq_slope"]'
-                ).assign(
-                    feature=lambda x: (
-                        x["feature"].apply(
-                            lambda x: "_".join(
-                                x.rsplit("_", 2)[:1] + x.rsplit("_", 2)[-1:0:-1]
+        df_correlation = pd.concat(
+            [
+                df_correlation,
+                (
+                    df_correlation.query(
+                        'feature_type in ["K","manders","rwc","lstsq_slope"]'
+                    ).assign(
+                        feature=lambda x: (
+                            x["feature"].apply(
+                                lambda x: "_".join(
+                                    x.rsplit("_", 2)[:1] + x.rsplit("_", 2)[-1:0:-1]
+                                )
                             )
                         )
                     )
-                )
-            ),
-        ]
-    )
+                ),
+            ]
+        )
+    else:
+        df_correlation = pd.DataFrame()
 
     df_shape = pd.concat(
         [
