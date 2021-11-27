@@ -1,18 +1,16 @@
 ## Optical Pooled Screens of Essential Genes
 
-Code and computational tools for the publication *The phenotypic landscape of essential human genes*.
+Code and computational tools related to the preprint publication *The phenotypic landscape of essential human genes*.
 
-For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our upcoming protocol paper: https://github.com/feldman4/OpticalPooledScreens.
+For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our upcoming Optical Pooled Screens protocol paper: https://github.com/feldman4/OpticalPooledScreens.
 
 ## More about this repository
 
 This repository contains additional application-specific resources for our study of essential gene function using optical pooled screens.
 
 This includes:
-- Many morphological features implemented as functions operating on scikit-image RegionProps objects (features come from CellProfiler and additional sources)
-- Functions for analyzing live-cell optical pooled screens (using TrackMate for cell tracking)
-
-Note: refactoring in progress.
+- Many additional image features implemented as functions operating on scikit-image RegionProps objects (features come from CellProfiler and additional sources)
+- Functions for analyzing live-cell optical pooled screens (calling TrackMate using headless Fiji for cell tracking)
 
 ## Installation (OSX)
 
@@ -38,27 +36,10 @@ This creates a virtual environment called `venv` for project-specific resources.
 sh install.sh
 ```
 
-The `ops` package is installed with `pip install -e`, so the source code in the `ops/` directory can be modified in place. The package is compatible with  Python 2.7 and Python 3.6, however results may not be numerically identical.
-
-## Running example code
+The `ops` package is installed with `pip install -e`, so the source code in the `ops/` directory can be modified in place.
 
 Once installed, activate the virtual environment from the project directory:
 
 ```bash
 source venv/bin/activate
-```
-
-You can then launch a project-specific notebook server:
-
-
-```bash
-jupyter notebook
-```
-
-The notebook `ops_python.ipynb` demonstrates step-by-step analysis using the high-level functions in `ops.firesnake.Snake`. The analysis pipeline can also be run using [snakemake](https://snakemake.readthedocs.io/en/stable/) (after activating the virtual environment):
-
-
-```bash
-cd example_data
-snakemake -s Snakefile_20180707_201
 ```
