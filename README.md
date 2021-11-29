@@ -1,6 +1,6 @@
 ## Optical Pooled Screens of Essential Genes
 
-Code and computational tools related to the preprint publication *The phenotypic landscape of essential human genes*.
+Code and computational tools related to the preprint publication, [*The phenotypic landscape of essential human genes*](https://www.biorxiv.org/content/10.1101/2021.11.28.470116v1).
 
 For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our upcoming Optical Pooled Screens protocol paper: https://github.com/feldman4/OpticalPooledScreens.
 
@@ -10,7 +10,7 @@ This repository contains additional application-specific resources for our study
 
 This includes:
 - Many additional image features implemented as functions operating on scikit-image RegionProps objects (features come from CellProfiler and additional sources)
-- Functions for analyzing live-cell optical pooled screens (calling TrackMate using headless Fiji for cell tracking)
+- Functions for analyzing live-cell optical pooled screens (calling TrackMate for cell tracking)
 
 ## Installation (OSX)
 
