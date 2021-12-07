@@ -393,8 +393,9 @@ def gb_apply_parallel(df, cols, func, n_jobs=None, tqdm=True, backend='loky'):
         for labels, df in zip(names, results):
             if not isinstance(labels,Iterable):
                 labels = [labels]
-            (df.assign(**{c: l for c, l in zip(cols, labels)})
-                .pipe(arr.append))
+            if df is not None:
+                (df.assign(**{c: l for c, l in zip(cols, labels)})
+                    .pipe(arr.append))
         results = pd.concat(arr)
     elif isinstance(results[0], pd.Series):
         if len(cols) == 1:
