@@ -8,7 +8,10 @@ import warnings
 import ops.utils
 
 def find_triangles(df):
-    v, c = get_vectors(df[['i', 'j']].values)
+    try:
+        v, c = get_vectors(df[['i', 'j']].values)
+    except:
+        return None
 
     return (pd.concat([
         pd.DataFrame(v).rename(columns='V_{0}'.format), 
