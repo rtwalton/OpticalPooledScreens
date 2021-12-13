@@ -325,7 +325,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
     """
 
     def work_on(df_t, df_s):
-        rotation, translation, score = evaluate_match(df_t, df_s, threshold_point=threshold_point,threshold_triange=threshold_triangle)
+        rotation, translation, score = evaluate_match(df_t, df_s, threshold_point=threshold_point,threshold_triangle=threshold_triangle)
         determinant = None if rotation is None else np.linalg.det(rotation)
         result = pd.Series({'rotation': rotation, 
                             'translation': translation, 
