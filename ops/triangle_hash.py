@@ -314,7 +314,8 @@ def plot_alignments(df_ph, df_sbs, df_align, site):
     return ax
 
 def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.186),
-                        initial_sites=8, batch_size=180, threshold_point=2, tqdm=True, n_jobs=-2):
+                        initial_sites=8, batch_size=180, threshold_point=2, threshold_triangle=0.3,
+                        tqdm=True, n_jobs=-2):
     """Provide triangles from one well only. Intitial_sites can be a list of tuples with pre-determined
     matching pairs of sites [(tile_0,site_0),...]. Should be good with 5-8 initial sites.
     rotation: rotation matrix
@@ -324,7 +325,7 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
     """
 
     def work_on(df_t, df_s):
-        rotation, translation, score = evaluate_match(df_t, df_s, threshold_point=threshold_point)
+        rotation, translation, score = evaluate_match(df_t, df_s, threshold_point=threshold_point,threshold_triange=threshold_triangle)
         determinant = None if rotation is None else np.linalg.det(rotation)
         result = pd.Series({'rotation': rotation, 
                             'translation': translation, 
@@ -335,11 +336,13 @@ def multistep_alignment(df_0, df_1, df_info_0, df_info_1, det_range=(1.125, 1.18
     if isinstance(initial_sites,list):
         arr = []
         for tile,site in initial_sites:
-            result = work_on(df_0.query('tile==@tile'),df_1.query('site==@site'))
-            result.at['site']=site
-            result.at['tile']=tile
-            arr.append(result)
-            
+            try:
+                result = work_on(df_0.query('tile==@tile'),df_1.query('site==@site'))
+                result.at['site']=site
+                result.at['tile']=tile
+                arr.append(result)
+            except:
+                pass
         df_initial = pd.DataFrame(arr)
     else:
         sites = (pd.Series(df_info_1.index)
