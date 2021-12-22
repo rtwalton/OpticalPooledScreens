@@ -309,7 +309,7 @@ def read_stack(filename, copy=True, maxworkers=None, fix_axes=False):
 def open_hdf_file(filename,mode='r'):
     return tables.file.open_file(filename,mode=mode)
 
-def read_hdf_image(filename,bbox=None,leading_dims=None,array_name='image',memoize=False):
+def read_hdf_image(filename,bbox=None,leading_dims=None,array_name='image',pad=False,memoize=False):
     """reads in image from hdf file with given bbox. significantly (~100x) faster when reading in a
     100x100 pixel chunk compared to reading in an entire 1480x1480 tif.
     WARNING: metadata is read into cache on first access; if file metadata changes, re-reading the file will 
@@ -330,6 +330,11 @@ def read_hdf_image(filename,bbox=None,leading_dims=None,array_name='image',memoi
                 image = image_node[...,i0:i1,j0:j1]
             else:
                 image = image_node[leading_dims+(slice(i0,i1),slice(j0,j1))]
+            if pad:
+                pads = ((i0-bbox[0],bbox[2]-i1),(j0-bbox[1],bbox[3]-j1))
+                image = np.pad(image,
+                    tuple((0,0) for _ in range(image.ndim-2))+pads
+                )
         else:
             image = image_node[...]
     except:
