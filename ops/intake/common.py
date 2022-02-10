@@ -280,6 +280,8 @@ def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_descr
             if project_axes:
                 data = np.max(nd2,axis=axes_exist.index(project_axes))
                 axes_exist.remove(project_axes)
+            else:
+                data = np.array(nd2)
             # preserve inner singleton dimensions
             axes = [ax in axes_exist for ax in axes]
             axes = axes[axes.index(True):]
