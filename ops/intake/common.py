@@ -236,7 +236,7 @@ def read_nd2(f,slicer=slice(None),backend='ND2SDK'):
 
     return data
 
-def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_description=None, split=False, backend='ND2SDK',**kwargs):
+def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_description=None, split=False, backend='ND2SDK',transpose=None,**kwargs):
     if f_description is None:
         f_description = parse_nd2_filename(f)
 
@@ -263,15 +263,18 @@ def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_descr
                 axes.remove(project_axes)
             else:
                 g = lambda x: x
-            print(axes)
+
             axes.remove(nd2.iter_axes[0])
             # preserve inner singleton dimensions
             axes = [ax in nd2.bundle_axes for ax in axes]
             axes = axes[axes.index(True):]
             for site,data in enumerate(nd2[slicer]):
                 data = g(data)
+                im = data[tuple([slice(None) if ax else None for ax in axes])]
+                if transpose is not None:
+                    im = np.transpose(im,transpose)
                 save(name(f_description,site=site, ext='tif'),
-                    data[tuple([slice(None) if ax else None for ax in axes])], 
+                    im, 
                     **kwargs)
         else:
             axes_exist = [ax for ax in axes if ax in nd2.axes]
@@ -285,6 +288,9 @@ def export_nd2(f, iter_axes='v', project_axes=False, slicer=slice(None), f_descr
             # preserve inner singleton dimensions
             axes = [ax in axes_exist for ax in axes]
             axes = axes[axes.index(True):]
+            im = data[tuple([slice(None) if ax else None for ax in axes])]
+            if transpose is not None:
+                im = np.transpose(im,transpose)
             save(name(f_description, ext='tif'),
-                data[tuple([slice(None) if ax else None for ax in axes])], 
+                im, 
                 **kwargs)
