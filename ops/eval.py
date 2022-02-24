@@ -20,7 +20,7 @@ def precision_recall_cluster_pairs(df,annotation_pairs_match,annotation_singles_
     df_cluster_pairs = pd.DataFrame(arr_)
     
     try:
-        df = expand_ampersand_singles(df.reset_index(),keep_columns=['cluster'])
+        df = expand_ampersand_singles(df.reset_index())
         df_cluster_pairs = expand_ampersand_pairs(df_cluster_pairs)
     except:
         pass
