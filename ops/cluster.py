@@ -1,6 +1,8 @@
 import leidenalg
 import graphtools
+import hdbscan
 import sklearn
+from sklearn import cluster
 from igraph import Graph
 import numpy as np
 import seaborn as sns
@@ -110,6 +112,40 @@ class AffinityLeiden(sklearn.base.BaseEstimator, sklearn.base.ClusterMixin):
 
     def adjusted_rand_score(self, s):
         return sklearn.metrics.adjusted_rand_score(self.labels_, s[self.index].values)
+
+def fcluster_to_df(Z,n_clusters,index):
+    clusters = hierarchy.fcluster(Z,n_clusters,criterion='maxclust')
+    return pd.DataFrame(clusters,index=index,columns=['cluster'])
+
+def leiden_to_df(adjacency,resolution,index,seed=42):
+    igraph = Graph().Weighted_Adjacency(
+            matrix=adjacency, mode="undirected"
+        )
+
+    partition = leidenalg.find_partition(
+        igraph,
+        partition_type=leidenalg.RBConfigurationVertexPartition,
+        weights=igraph.es["weight"],
+        n_iterations=-1,
+        seed=seed,
+        resolution_parameter=resolution,
+    )
+
+    return pd.DataFrame(partition.membership,index=index,columns=['cluster'])
+
+def dbscan_to_df(adjacency,eps,min_samples,index):
+    distance = 1-(adjacency/adjacency.max())
+
+    clusters = cluster.dbscan(distance,metric='precomputed',eps=eps,min_samples=min_samples)[1]
+
+    return pd.DataFrame(clusters,index=index,columns=['cluster'])
+
+def hdbscan_to_df(adjacency,min_cluster_size,min_samples,index):
+    distance = 1-(adjacency/adjacency.max())
+
+    clusters = hdbscan.hdbscan(distance,metric='precomputed',min_cluster_size=min_cluster_size,min_samples=min_samples)[0]
+
+    return pd.DataFrame(clusters,index=index,columns=['cluster'])
 
 def consensus_matrix(
     dfs, column="cluster", weights=None, combine_nt=False, nt_threshold=1
