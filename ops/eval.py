@@ -206,7 +206,7 @@ def annotation_recall_pairs(df_annotation_pairs):
         return 0.
 
 def annotation_precision_pairs(df_cluster_pairs,annotations,annotation_name='complex'):
-    df_cluster_pairs['annotation_match']=(
+    df_cluster_pairs.loc[:,'annotation_match']=(
         df_cluster_pairs[f'{annotation_name}_A']==df_cluster_pairs[f'{annotation_name}_B']
     )
     d = dict()
