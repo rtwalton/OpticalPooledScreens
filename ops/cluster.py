@@ -147,16 +147,11 @@ def hdbscan_to_df(adjacency,min_cluster_size,min_samples,index):
 
     return pd.DataFrame(clusters,index=index,columns=['cluster'])
 
-def kmeans_to_df(adjacency,n_clusters,index,seed=42):
-    clusters = cluster.k_means(adjacency,metric='precomputed',n_clusters=n_clusters,random_state=seed)[1]
-
-    return pd.DataFrame(clusters,index=index,columns=['cluster'])
-
 def spectral_to_df(adjacency,n_clusters,index,seed=42):
     if not np.array_equal(adjacency,adjacency.T):
         adjacency = (adjacency+adjacency.T)/2
-        
-    clusters = cluster.spectral_clustering(adjacency,metric='precomputed',n_clusters=n_clusters,random_state=seed)
+
+    clusters = cluster.spectral_clustering(adjacency,n_clusters=n_clusters,random_state=seed)
 
     return pd.DataFrame(clusters,index=index,columns=['cluster'])
 
