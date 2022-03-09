@@ -345,7 +345,7 @@ class Snake():
         return nuclei, cells
         
     @staticmethod
-    def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True):
+    def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True, log_kwargs=dict()):
         """Export three-channel RGB image for use with cellpose GUI (e.g., to select
         cell diameter). Nuclei are exported to blue (cellpose channel=3), cytoplasm to
         green (cellpose channel=2).
@@ -360,7 +360,7 @@ class Snake():
         cyto = data[cyto_index]
         blank = np.zeros_like(dapi)
         if logscale:
-            cyto = image_log_scale(cyto)
+            cyto = image_log_scale(cyto,**log_kwargs)
         cyto = cyto/cyto.max() # for ubyte conversion
         dapi_upper = np.percentile(dapi, 99.5)
         dapi = dapi / dapi_upper
