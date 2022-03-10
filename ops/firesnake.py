@@ -334,11 +334,12 @@ class Snake():
         return remove_border(labels,~mask)
 
     @staticmethod
-    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, logscale=True, log_kwargs=dict(), cellpose_kwargs=dict()):
+    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, logscale=True, cellpose_kwargs=dict()):
         from ops.cellpose import segment_cellpose_rgb#,segment_cellpose
 
         # return segment_cellpose(data[dapi_index], data[cyto_index],
         #                 nuclei_diameter=diameter, cell_diameter=diameter)
+        log_kwargs=cellpose_kwargs.pop('log_kwargs',dict())
 
         rgb = Snake._prepare_cellpose(data, dapi_index, cyto_index, logscale, log_kwargs=log_kwargs)
         nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, **cellpose_kwargs)
