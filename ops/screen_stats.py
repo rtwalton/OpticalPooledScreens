@@ -128,7 +128,7 @@ def bootstrap_cells(s, n_cells=100, n_reps=10000, statistic=np.mean, n_jobs=1, t
     else:
         reps = range(n_reps)
     
-    if n_job!=1:
+    if n_jobs!=1:
         bootstrapped = Parallel(n_jobs=n_jobs)(delayed(bootstrap)(vals, n_cells, statistic) 
                                                for _ in reps)
     else:
