@@ -297,6 +297,24 @@ class Snake():
         return cells
 
     @staticmethod
+    def _segment_cells_dilation(nuclei, radius=10, ring=True):
+        mask = skimage.morphology.binary_dilation(nuclei>0,skimage.morphology.disk(radius))
+
+        try:
+            # skimage precision warning
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                cells = ops.process.find_cells(nuclei, mask)
+        except ValueError:
+            print('segment_cells error -- no cells')
+            cells = nuclei
+
+        if ring:
+            cells -= nuclei
+
+        return cells
+
+    @staticmethod
     def _segment_cells_robust(data, channel, nuclei, background_offset, background_quantile=0.05, 
         smooth=None, erosion=None, add_nuclei=True, mask_dilation=5):
 
@@ -334,16 +352,21 @@ class Snake():
         return remove_border(labels,~mask)
 
     @staticmethod
-    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, logscale=True, cellpose_kwargs=dict()):
-        from ops.cellpose import segment_cellpose_rgb#,segment_cellpose
+    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, logscale=True, cellpose_kwargs=dict(), cells=True):
 
         # return segment_cellpose(data[dapi_index], data[cyto_index],
         #                 nuclei_diameter=diameter, cell_diameter=diameter)
         log_kwargs=cellpose_kwargs.pop('log_kwargs',dict())
 
         rgb = Snake._prepare_cellpose(data, dapi_index, cyto_index, logscale, log_kwargs=log_kwargs)
-        nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, **cellpose_kwargs)
-        return nuclei, cells
+        if cells:
+            from ops.cellpose import segment_cellpose_rgb
+            nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, **cellpose_kwargs)
+            return nuclei, cells
+        else:
+            from ops.cellpose import segment_cellpose_nuclei_rgb
+            nuclei = segment_cellpose_nuclei_rgb(rgb,nuclei_diameter,**cellpose_kwargs)
+            return nuclei
         
     @staticmethod
     def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True, log_kwargs=dict()):

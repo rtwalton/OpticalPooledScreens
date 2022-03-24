@@ -68,6 +68,22 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
 
     return nuclei, cells
 
+def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False, 
+                     net_avg=False, remove_edges=True):
+
+    model_dapi = Cellpose(model_type='nuclei', gpu=gpu, net_avg=net_avg)
+    
+    nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter)
+
+    print(f'found {nuclei.max()} nuclei before removing edges', file=sys.stderr)
+    if remove_edges:
+        print('removing edges')
+        nuclei = clear_border(nuclei)
+
+    print(f'found {nuclei.max()} final nuclei', file=sys.stderr)
+
+    return nuclei
+
 
 def image_log_scale(data, bottom_percentile=10, floor_threshold=50, ignore_zero=True):
     import numpy as np
