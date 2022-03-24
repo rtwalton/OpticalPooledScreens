@@ -69,7 +69,7 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
     return nuclei, cells
 
 def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False, 
-                     net_avg=False, remove_edges=True):
+                     net_avg=False, remove_edges=True, **kwargs):
 
     model_dapi = Cellpose(model_type='nuclei', gpu=gpu, net_avg=net_avg)
     
