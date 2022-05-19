@@ -191,19 +191,31 @@ class Snake():
 
     @staticmethod
     def _align_phenotype_channels(data,target,source,riders=[],upsample_factor=2, window=2, remove=False):
-        windowed = Align.apply_window(data[[target,source]],window)
+        data_ = data.copy()
+        if data.ndim==4:
+            stack=True
+            data_ = data.max(axis=0)
+        print(data_.shape)
+        windowed = Align.apply_window(data_[[target,source]],window)
         # remove noise?
         offsets = Align.calculate_offsets(windowed,upsample_factor=upsample_factor)
+        print(offsets)
         if not isinstance(riders,list):
             riders = [riders]
-        full_offsets = np.zeros((data.shape[0],2))
+        full_offsets = np.zeros((data_.shape[0],2))
         full_offsets[[source]+riders] = offsets[1]
-        aligned = Align.apply_offsets(data, full_offsets)
+        print(full_offsets)
+        if stack:
+            aligned = np.array([Align.apply_offsets(slice_,full_offsets)
+                for slice_ in data])
+        else:
+            aligned = Align.apply_offsets(data_, full_offsets)
+        print(aligned.shape)
         if remove == 'target':
-            channel_order = list(range(data.shape[0]))
+            channel_order = list(range(data.shape[-3]))
             channel_order.remove(source)
             channel_order.insert(target+1,source)
-            aligned = aligned[channel_order]
+            aligned = aligned[...,channel_order,:,:]
             aligned = remove_channels(aligned, target)
         elif remove == 'source':
             aligned = remove_channels(aligned, source)
@@ -310,6 +322,7 @@ class Snake():
             cells = nuclei
 
         if ring:
+            # WARNING: this causes issues (& integer wraparound) for cells on the edge which are removed in find_cells()
             cells -= nuclei
 
         return cells
