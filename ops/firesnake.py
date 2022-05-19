@@ -195,22 +195,18 @@ class Snake():
         if data.ndim==4:
             stack=True
             data_ = data.max(axis=0)
-        print(data_.shape)
         windowed = Align.apply_window(data_[[target,source]],window)
         # remove noise?
         offsets = Align.calculate_offsets(windowed,upsample_factor=upsample_factor)
-        print(offsets)
         if not isinstance(riders,list):
             riders = [riders]
         full_offsets = np.zeros((data_.shape[0],2))
         full_offsets[[source]+riders] = offsets[1]
-        print(full_offsets)
         if stack:
             aligned = np.array([Align.apply_offsets(slice_,full_offsets)
                 for slice_ in data])
         else:
             aligned = Align.apply_offsets(data_, full_offsets)
-        print(aligned.shape)
         if remove == 'target':
             channel_order = list(range(data.shape[-3]))
             channel_order.remove(source)
