@@ -11,7 +11,7 @@ notebooks/
 figures/
 libraries/
 
-example_image_analysis.ipynb
+# example_image_analysis.ipynb
 
 !example_data/
 example_data/*
