@@ -5,25 +5,23 @@ from ops.imports import *
 import pandas as pd
 
 CYCLES = ['c'+str(num) for num in range(1,12)]
-CYCLE_FILES = [1] + [4,]*(len(CYCLES)-1)
-CHANNELS = ['DAPI-CY3-A594-CY5-CY7']+[['CY3','A594','CY5','CY7']]*(len(CYCLES)-1)
+CHANNELS = ['DAPI-CY3-A594-CY5-CY7']+['CY3-A594-CY5-CY7']*(len(CYCLES)-1)
 
 BASES = 'GTAC'
 
-THRESHOLD_READS = 315  # threshold for detecting reads
-THRESHOLD_DAPI = 1000 # threshold for segmenting nuclei on dapi signal
-# different filter used for A wells
-THRESHOLD_CELL = {'A1':2500,'A2':2500,'A3':2500,'B1':1700,'B2':1700,'B3':1700}  # threshold for segmenting cells on sbs background signal
+THRESHOLD_READS = 400  # threshold for detecting reads
+THRESHOLD_DAPI = 400 # threshold for segmenting nuclei on dapi signal
+THRESHOLD_CELL = 1350 # threshold for segmenting cells on sbs background signal
 NUCLEUS_AREA = (20,800)
 Q_MIN = 0 # levenshtein distance >= 2 for this library so not worried
 
-ROWS = ['A','B']
-COLUMNS = list(range(1,4))
+ROWS = ['A']
+COLUMNS = list(range(2,3))
 WELLS = [row+str(column) for column in COLUMNS for row in ROWS]
-TILES = list(range(333))
+TILES = list(range(121))
 
-df_design = pd.read_csv('/luke-perm/libraries/pool10/pool10_design.csv',index_col=None)
-df_pool = df_design.query('dialout==[0,1]').drop_duplicates('sgRNA')
+df_design = pd.read_csv('~/libraries/pool12/pool12_essentials_livecell_design.csv',index_col=None)
+df_pool = df_design.query('dialout==[1,3]').drop_duplicates('sgRNA')
 df_pool['prefix'] = df_pool.apply(lambda x: x.sgRNA[:x.prefix_length],axis=1)
 
 preprocess_pattern = 'input_sbs/preprocess/{cycle}/10X_{cycle}_{{well}}_{channel}_Site-{{tile}}.tif'
@@ -42,17 +40,17 @@ rule all:
         # request individual files or list of files
         expand('process_sbs/tables/10X_{well}_Tile-{tile}.cells.csv', well=WELLS, tile=TILES),
         expand('process_sbs/tables/10X_{well}_Tile-{tile}.sbs_info.csv', well=WELLS, tile=TILES),
+        expand('process_sbs/images/10X_{well}_Tile-{tile}.cells.tif', well=WELLS, tile=TILES),
     
 rule align:
     priority: -1
     input:
-        ([[preprocess_pattern.format(cycle=CYCLES[0],channel=CHANNELS[0])]]+
-            [[preprocess_pattern.format(cycle=CYCLES[cycle],channel=channel) for channel in CHANNELS[cycle]] for cycle in range(1,len(CYCLES))])
+        [preprocess_pattern.format(cycle=cycle,channel=channel) for channel, cycle in zip(CHANNELS,CYCLES)]
     output:
         temp('process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif')
     run:
-        Snake.align_SBS(output=output, data=input, method='SBS_mean', cycle_files=CYCLE_FILES, n=1,
-            display_ranges=DISPLAY_RANGES, luts=LUTS, upsample_factor=1)
+        Snake.align_SBS(output=output, data=input, method='SBS_mean', n=1, keep_trailing='propagate_extras',
+            display_ranges=DISPLAY_RANGES, luts=LUTS, upsample_factor=2)
 
 rule transform_LoG:
     priority: -1
@@ -110,8 +108,7 @@ rule segment_nuclei:
     output:
         'process_sbs/images/10X_{well}_Tile-{tile}.nuclei.tif'
     run:
-        Snake.segment_nuclei(output=output, data=input[0], 
-            # threshold=THRESHOLD_DAPIS[wildcards['well']], 
+        Snake.segment_nuclei(output=output, data=input[0],
             threshold=THRESHOLD_DAPI,
             area_min=NUCLEUS_AREA[0], 
             area_max=NUCLEUS_AREA[1])
@@ -125,7 +122,7 @@ rule segment_cells:
     run:
         Snake.segment_cells(output=output, 
             data=input[0], nuclei=input[1], 
-            threshold=THRESHOLD_CELL[wildcards.well])
+            threshold=THRESHOLD_CELL)
 
 rule extract_bases:
     input:
