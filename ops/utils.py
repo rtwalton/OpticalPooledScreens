@@ -12,22 +12,22 @@ import pandas as pd
 
 
 # PYTHON
-def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1):
+def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1,usecols=None):
     files = glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
 
     from tqdm.notebook import tqdm
 
-    def get_file(f):
+    def get_file(f,usecols):
         try:
-            return pd.read_csv(f)
+            return pd.read_csv(f,usecols=usecols)
         except pd.errors.EmptyDataError:
             pass
 
     if n_jobs != 1:
         from joblib import Parallel,delayed
-        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file) for file in tqdm(files))
+        arr = Parallel(n_jobs=n_jobs)(delayed(get_file,usecols=usecols)(file) for file in tqdm(files))
     else:
-        arr = [get_file(file) for file in files]
+        arr = [get_file(file,usecols) for file in files]
 
     df = pd.concat(arr)
     if output_filetype=='csv':
