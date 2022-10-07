@@ -2,7 +2,7 @@
 
 Code and computational tools related to the preprint publication, [*The phenotypic landscape of essential human genes*](https://www.biorxiv.org/content/10.1101/2021.11.28.470116v1).
 
-For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our upcoming Optical Pooled Screens protocol paper: https://github.com/feldman4/OpticalPooledScreens.
+For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our Nature Protocols paper, [*Pooled genetic perturbation screens with image-based phenotypes*](https://pubmed.ncbi.nlm.nih.gov/35022620/): https://github.com/feldman4/OpticalPooledScreens.
 
 ## More about this repository
 
