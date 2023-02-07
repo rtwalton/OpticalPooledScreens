@@ -31,8 +31,10 @@ class Snake():
     """
 
     @staticmethod
-    def _apply_illumination_correction(data, correction=None, rolling_ball=False, rolling_ball_kwargs={},
+    def _apply_illumination_correction(data, correction=None, zproject=False, rolling_ball=False, rolling_ball_kwargs={},
         n_jobs=1, backend='threading'):
+        if zproject:
+            data = data.max(axis=0)
         if n_jobs == 1:
             if correction is not None:
                 data = (data/correction).astype(np.uint16)
@@ -109,16 +111,12 @@ class Snake():
                 else:
                     arr.append(np.array(data[current:current+cycle]))
                 current += cycle
-
-            data = np.array(arr)
-        else:
-            # TODO: creating a "ragged" array here is deprecated in numpy
-            data = np.array(data)
+            data = arr
 
         # if number of channels varies across cycles
-        if data.ndim==1:
+        if ~all(x.shape==data[0].shape for x in data):
             # start by only keeping channels in common
-            channels = [len(x) for x in data]
+            channels = [x.shape[-3] if x.ndim>2 else 1 for x in data]
             stacked = np.array([x[-min(channels):] for x in data])
 
             # add back in extra channels if requested
@@ -133,7 +131,7 @@ class Snake():
             else:
                 extras = [0,]*stacked.shape[0]
         else:
-            stacked = data
+            stacked = np.array(data)
             extras = [0,]*stacked.shape[0]
 
         assert stacked.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
@@ -191,10 +189,12 @@ class Snake():
 
     @staticmethod
     def _align_phenotype_channels(data,target,source,riders=[],upsample_factor=2, window=2, remove=False):
-        data_ = data.copy()
         if data.ndim==4:
-            stack=True
+            stack = True
             data_ = data.max(axis=0)
+        else:
+            data_ = data.copy()
+            stack = False
         windowed = Align.apply_window(data_[[target,source]],window)
         # remove noise?
         offsets = Align.calculate_offsets(windowed,upsample_factor=upsample_factor)
