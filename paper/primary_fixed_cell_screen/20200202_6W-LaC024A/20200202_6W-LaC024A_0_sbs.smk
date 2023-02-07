@@ -22,7 +22,7 @@ COLUMNS = list(range(1,4))
 WELLS = [row+str(column) for column in COLUMNS for row in ROWS]
 TILES = list(range(333))
 
-df_design = pd.read_csv('~/libraries/pool10/pool10_design.csv',index_col=None)
+df_design = pd.read_csv('pool10_design.csv',index_col=None)
 df_pool = df_design.query('dialout==[0,1]').drop_duplicates('sgRNA')
 df_pool['prefix'] = df_pool.apply(lambda x: x.sgRNA[:x.prefix_length],axis=1)
 
@@ -51,7 +51,7 @@ rule align:
     output:
         temp('process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif')
     run:
-        Snake.align_SBS(output=output, data=input, method='SBS_mean', cycle_files=CYCLE_FILES, n=1,
+        Snake.align_SBS(output=output, data=input, method='SBS_mean', cycle_files=CYCLE_FILES, n=1, keep_extras=True,
             display_ranges=DISPLAY_RANGES, luts=LUTS, upsample_factor=1)
 
 rule transform_LoG:

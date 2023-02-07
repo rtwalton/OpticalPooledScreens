@@ -27,7 +27,7 @@ IS_A2 = {WELL:0 for WELL in WELLS if WELL != "A2"}
 IS_A2.update({"A2":1})
 TILES = list(range(333))
 
-df_design = pd.read_csv('/luke-perm/libraries/pool10/pool10_design.csv',index_col=None)
+df_design = pd.read_csv('pool10_design.csv',index_col=None)
 df_pool = df_design.query('dialout==[0,1]').drop_duplicates('sgRNA')
 # prefix length calculated in rule call_cells since A2 only has 10 cycles
 # df_pool['prefix'] = df_pool.apply(lambda x: x.sgRNA[:x.prefix_length],axis=1)
@@ -60,7 +60,7 @@ rule align:
     output:
         temp('process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif')
     run:
-        Snake.align_SBS(output=output, data=input, method='SBS_mean', cycle_files=CYCLE_FILES_DICT[IS_A2[wildcards['well']]], n=1,
+        Snake.align_SBS(output=output, data=input, method='SBS_mean', cycle_files=CYCLE_FILES_DICT[IS_A2[wildcards['well']]], n=1, keep_extras=True,
             display_ranges=DISPLAY_RANGES, luts=LUTS, upsample_factor=1)
 
 rule transform_LoG:
