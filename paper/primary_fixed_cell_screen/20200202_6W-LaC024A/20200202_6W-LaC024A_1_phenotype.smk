@@ -71,7 +71,7 @@ rule correct_align:
     output:
         'process_ph/images/20X_{{well}}_{channels}_Tile-{{tile}}.aligned.hdf'.format(channels=FINAL_CHANNELS)
     run:
-        corrected = [Snake.apply_illumination_correction(data=data,correction=correction) 
+        corrected = [Snake.apply_illumination_correction(data=data,correction=correction,zproject=True) 
                         for data, correction
                         in zip(input[:TILE_FILES],input[TILE_FILES:])
                     ]
