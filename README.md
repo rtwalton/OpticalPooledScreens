@@ -1,6 +1,6 @@
 ## Optical Pooled Screens of Essential Genes
 
-Code and computational tools related to the preprint publication, [*The phenotypic landscape of essential human genes*](https://www.biorxiv.org/content/10.1101/2021.11.28.470116v1).
+This repository contains code and computational tools related to the publication, [*The phenotypic landscape of essential human genes*](https://pubmed.ncbi.nlm.nih.gov/36347254/).
 
 For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our Nature Protocols paper, [*Pooled genetic perturbation screens with image-based phenotypes*](https://pubmed.ncbi.nlm.nih.gov/35022620/): https://github.com/feldman4/OpticalPooledScreens.
 
@@ -43,3 +43,36 @@ Once installed, activate the virtual environment from the project directory:
 ```bash
 source venv/bin/activate
 ```
+
+## Data Access
+
+Raw image data from the fixed-cell screen presented in the [publication](https://pubmed.ncbi.nlm.nih.gov/36347254/) can be accessed from the public [BioImage Archive](https://www.ebi.ac.uk/bioimage-archive/) data repository (study [`S-BIAD394`](https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD394)). Note that the web interface for this study is currently inactive. However, all data can be accessed using Aspera and the corresponding command line tool, `ascp`.
+
+First, download the IBM Aspera Command Line Interface (includes `ascp`) from [here](http://www.ibm.com/support/fixcentral/swg/quickorder?parent=ibm%7EOther%20software&product=ibm/Other+software/IBM+Aspera+CLI&release=All&platform=All&function=all&source=fc), and complete the install by following the platform-specific user guides available [here](https://www.ibm.com/docs/en/aci/latest).
+
+Then, the image data can be downloaded using the following helper function, executed from the command line while the virtual environment created during installation of this repository is activated:
+
+```bash
+python -m ops.download download_from_bioimage_archive \
+<local filesystem destination> \
+--plate <plate> \
+--dataset <dataset>
+--well <well> \
+--site <tile> \
+--ascp <path/to/ascp/executable>
+```
+
+Where valid `plate`s are:
+
+| |
+|-------------|
+|20200202_6W-LaC024A|
+|20200202_6W-LaC024B|
+|20200202_6W-LaC024C|
+|20200202_6W-LaC024D|
+|20200202_6W-LaC024E|
+|20200202_6W-LaC024F|
+|20200206_6W-LaC025A|
+|20200206_6W-LaC025B|
+
+`dataset` must be either `sequencing` or `phenotype`. Any or all of `plate`, `well`, and `tile` can be set to `all` to download all of the corresponding images. Note that if `ascp` is in your path, you can use `--ascp=ascp`. The full list of available files is present in this repository [here](https://github.com/lukebfunk/OpticalPooledScreens/blob/master/paper/BioImage_Archive.csv.gz).

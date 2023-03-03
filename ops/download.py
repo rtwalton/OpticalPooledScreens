@@ -10,7 +10,7 @@ package_dir = os.path.sep.join(
     os.path.normpath(__file__).split(os.path.sep)[:-2])
 aspera_openssh = os.path.join(package_dir, 'paper/asperaweb_id_dsa.openssh')
 ascp_guess = os.path.join(os.environ['HOME'], '.aspera/connect/bin/ascp')
-cell_idr_files = f'{package_dir}/paper/BioImage_Archive.csv.gz'
+bia_files = f'{package_dir}/paper/BioImage_Archive.csv.gz'
 
 
 def write_pairlist(df_files, filename, remote_prefix='/fire/S-BIAD/394/S-BIAD394/Files/'):
@@ -34,8 +34,9 @@ def format_ascp_command(ascp, pairlist, local='.'):
     return f'{ascp} {ascp_opts} {pair_opts} {local}'
 
 
-def download_from_bioimage_archive(directory, query='', ascp=ascp_guess):
-    """Download data from Cell IDR."""
+def download_from_bioimage_archive(directory, plate='all', dataset='sequencing', 
+        well='all', site='all', query=None, ascp=ascp_guess):
+    """Download data from the BioImage Archive."""
     os.makedirs(directory,exist_ok=True)
 
     if not shutil.which(ascp):
@@ -44,27 +45,28 @@ def download_from_bioimage_archive(directory, query='', ascp=ascp_guess):
             print(f'Error: Aspera ascp executable not found at {ascp}')
             raise QuitError
 
-    # # select our example
-    # select_tile = f'idr_name == "experiment{experiment}"'
-    # if well != 'all':
-    #     select_tile += ' & well == @well'
-    # if tile != 'all': 
-    #     select_tile += ' & tile == @tile'
-
-    # select_image_tags = 'tag == ["phenotype", "sbs"]'    
-    df_idr = (pd.read_csv(cell_idr_files, low_memory=False)
-     .query(query)
-    #  .query(select_image_tags)
+    queries = ['(Dataset == @dataset)']
+    if plate != 'all':
+        queries.append('(Plate == @plate)')
+    if well != 'all':
+        queries.append('(Well == @well)')
+    if site != 'all': 
+        queries.append('(Site == @site)')
+    if query is not None:
+        queries.append(f'({query})')
+  
+    df_bia = (pd.read_csv(bia_files, low_memory=False)
+     .query('&'.join(queries))
     )
 
-    if df_idr.pipe(len)==0:
-        raise ValueError('No valid tiles specified for the chosen experiment.')
+    if df_bia.pipe(len)==0:
+        raise ValueError('No valid images specified.')
 
     pairlist = f'{directory}/ascp_download_list.txt'
-    write_pairlist(df_idr, pairlist)
+    write_pairlist(df_bia, pairlist)
     command = format_ascp_command(ascp, pairlist, local=directory)
 
-    print(f'Downloading {len(df_idr)} files from Cell-IDR with command: {command}')
+    print(f'Downloading {len(df_bia)} files from the BioImage Archive with the command: {command}')
     try:
         subprocess.check_call(command, shell=True)
     except subprocess.CalledProcessError as e:
@@ -72,9 +74,6 @@ def download_from_bioimage_archive(directory, query='', ascp=ascp_guess):
             'Try a secure network with better connectivity.'
             )
         raise QuitError
-
-    # well_tile_list = f'{directory}/experiment{experiment}/well_tile_list_example.csv'
-    # df_idr[['well','tile']].drop_duplicates().to_csv(well_tile_list, index=None)
 
 class QuitError(Exception):
     """Don't generate a stack trace if encountered in command line app.
