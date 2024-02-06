@@ -8,7 +8,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='ops-lasagna',
-    version='0.1',
+    version='1.1',
     description='Analysis code for pooled optical screening.',  # Required
     # long_description=long_description,
     url='http://github.com/blaineylab/opticalpooledscreens',

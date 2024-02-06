@@ -29,3 +29,4 @@ example_pool/*
 !example_pool/design.xls
 !example_pool/kosuri_dialout_primers.csv
 !example_pool/NCBI_ids.tsv
+venv_ops_new/

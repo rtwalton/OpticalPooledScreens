@@ -12,7 +12,6 @@ import ops.filenames
 import ops
 import ops.io
 
-
 # load font
 def load_truetype(truetype='visitor1.ttf',size=10):
     """
