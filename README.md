@@ -1,16 +1,8 @@
 ## Optical Pooled Screens of Essential Genes
 
-This repository contains code and computational tools related to the publication, [*The phenotypic landscape of essential human genes*](https://pubmed.ncbi.nlm.nih.gov/36347254/).
-
-For new projects using optical pooled screens, it is highly recommended to use the Github repository accompanying our Nature Protocols paper, [*Pooled genetic perturbation screens with image-based phenotypes*](https://pubmed.ncbi.nlm.nih.gov/35022620/): https://github.com/feldman4/OpticalPooledScreens.
-
 ## More about this repository
 
-This repository contains additional application-specific resources for our study of essential gene function using optical pooled screens.
-
-This includes:
-- Many additional image features implemented as functions operating on scikit-image RegionProps objects (features come from CellProfiler and additional sources)
-- Functions for analyzing live-cell optical pooled screens (calling TrackMate for cell tracking)
+This repository is currently undergoing restructuring and a more complete README and walkthrough is on the horizon. Please be patient as we pressure test this across upcoming screens!
 
 ## Installation (OSX)
 
