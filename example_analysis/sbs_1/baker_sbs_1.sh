@@ -8,7 +8,7 @@
 #SBATCH --output baker_sbs_1-%j.out
 
 # Load any necessary modules or activate virtual environments
-source /lab/barcheese01/mdiberna/OpticalPooledScreens_david/venv/bin/activate
+source /lab/barcheese01/mdiberna/OpticalPooledScreens/venv_ops_new/bin/activate
 
 # Change to the directory where your Snakefiles are located
 cd /lab/barcheese01/screens/baker

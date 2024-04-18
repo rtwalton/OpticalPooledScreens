@@ -4,7 +4,7 @@
 
 . venv_ops_new/bin/activate
 pip install wheel
-pip install -r requirements_venv._04_06_2024.txt
+pip install -r requirements_venv_ops_new_18_04_2024.txt
 # link ops package instead of copying
 # jupyter and snakemake will import code from .py files in the ops/ directory
 
