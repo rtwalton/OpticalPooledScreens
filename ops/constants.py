@@ -1,9 +1,9 @@
-# common
+# Common constants
 WELL = 'well'
 DATASET = 'dataset'
 FILE = 'file'
 
-# in situ
+# Constants related to in situ data
 TILE = 'tile'
 SITE = 'site'
 CELL = 'cell'
@@ -25,7 +25,7 @@ GLOBAL_Y = 'global_y'
 CLUSTER = 'cluster'
 CLUSTER_SIZE = 'cluster_size'
 
-# design
+# Constants related to design
 DIALOUT = 'dialout'
 SUBPOOL = 'subpool'
 DESIGN = 'design'
@@ -45,7 +45,7 @@ DUPLICATE_OLIGOS = 'duplicate_oligos'
 OLIGO = 'oligo'
 SGRNAS_PER_GENE = 'sgRNAs_per_gene'
 
-# other
+# Other constants
 STIMULANT = 'stimulant'
 GENE_CLASS = 'gene_class'
 NM_ID = 'NM_id'
@@ -54,8 +54,10 @@ REPLICATE = 'replicate'
 
 def loc(query):
     """Fill in constants in a pandas query.
-    GENE_ID = 'gene_id'
-    df.query(loc('{GENE_ID} == -1'))
+    
+    Example:
+        GENE_ID = 'gene_id'
+        df.query(loc('{GENE_ID} == -1'))
     """
     return query.format(**globals())
 

@@ -1,39 +1,55 @@
 import functools
 import multiprocessing
+from joblib import Parallel, delayed
 
-from string import Formatter
+import re
+import os
+import string
 from itertools import product
-from collections.abc import Iterable
 from glob import glob
+from collections.abc import Iterable
 
 import decorator
+from natsort import natsorted
 import numpy as np
 import pandas as pd
 
-
-# PYTHON
-def combine_tables(tag,output_filetype='hdf',subdir='process',n_jobs=1,usecols=None):
-    files = glob('{subdir}/*.{tag}.csv'.format(subdir=subdir,tag=tag))
-
-    from tqdm.notebook import tqdm
-
-    def get_file(f,usecols):
+def combine_tables(tag, output_filetype='hdf', subdir='process', n_jobs=1, output_dir=None, usecols=None):
+    
+    files = glob(f'{subdir}/*{tag}.csv')
+    
+    def get_file(f, usecols):
         try:
-            return pd.read_csv(f,usecols=usecols)
+            return pd.read_csv(f, usecols=usecols)
         except pd.errors.EmptyDataError:
+            print(f"Empty data in file: {f}")
             pass
 
-    if n_jobs != 1:
-        from joblib import Parallel,delayed
-        arr = Parallel(n_jobs=n_jobs)(delayed(get_file,usecols=usecols)(file) for file in tqdm(files))
-    else:
-        arr = [get_file(file,usecols) for file in files]
+    if tag == 'bases':
+        # Process bases files separately for each prefix tag
+        prefix_tags = set([os.path.basename(file).split('_')[1] for file in files])
+        for prefix_tag in prefix_tags:
+            prefix_files = [file for file in files if prefix_tag in file]
+            arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in prefix_files)
+            df = pd.concat(arr)
+            output_file = f"{output_dir}/{prefix_tag}_{tag}.{output_filetype}"
+            if output_filetype == 'csv':
+                df.to_csv(output_file)
+            else:
+                df.to_hdf(output_file, tag, mode='w')
+            print(f"Saved {output_file}")
 
-    df = pd.concat(arr)
-    if output_filetype=='csv':
-        df.to_csv(tag+'.csv')
     else:
-        df.to_hdf(tag + '.hdf', tag, mode='w')
+        # For other tags, combine all files into a single output file
+        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in files)
+        df = pd.concat(arr)
+        output_file = f"{output_dir}/{tag}.{output_filetype}"
+        if output_filetype == 'csv':
+            df.to_csv(output_file)
+        else:
+            df.to_hdf(output_file, tag, mode='w')
+        print(f"Saved {output_file}")
+
 
 def format_input(input_table, n_jobs=1, **kwargs):
     df = pd.read_excel(input_table)
@@ -48,7 +64,8 @@ def format_input(input_table, n_jobs=1, **kwargs):
     else:
         for output_file,df_input in df.groupby('snakemake filename'):
             process_site(output_file,df_input)
-
+            
+            
 def memoize(active=True, copy_numpy=True):
     """The memoized function has attributes `cache`, `keys`, and `reset`. 
     
@@ -157,44 +174,6 @@ def groupby_reduce_concat(gb, *args, **kwargs):
 
     return pd.concat(arr, axis=1).reset_index()
 
-def groupby_reduce_concat_dask(gb, *args, meta=None, **kwargs):
-    """
-    df = groupby_reduce_concat_dask((ddf_cells
-          .groupby(['stimulant', 'gene'])
-          ['gate_NT']),
-          fraction_gate_NT='mean', 
-          cell_count='size')
-          )
-    """
-    if meta==None:
-        meta = {kw:float for kw in list(kwargs)}
-
-    for arg in args:
-        kwargs[arg] = arg
-
-    reductions = {'mean': lambda x: x.mean(),
-                  'min': lambda x: x.min(),
-                  'max': lambda x: x.max(),
-                  # 'median': lambda x: x.median(),
-                  'std': lambda x: x.std(),
-                  # 'sem': lambda x: x.sem(),
-                  'size': lambda x: x.size(),
-                  'count': lambda x: x.size(),
-                  'sum': lambda x: x.sum(),
-                  'sum_int': lambda x: x.sum().astype(int),
-                  # 'first': lambda x: x.nth(0),
-                  # 'second': lambda x: x.nth(1)
-                  }
-
-    arr = []
-    for name, f in kwargs.items():
-        if callable(f):
-            arr += [gb.apply(f,meta=meta[name]).compute().rename(name)]
-        else:
-            arr += [reductions[f](gb).compute().rename(name)]
-
-    return pd.concat(arr, axis=1).reset_index()
-
 
 def groupby_histogram(df, index, column, bins, cumulative=False, normalize=False):
     """Substitute for df.groupby(index)[column].value_counts(),
@@ -238,8 +217,8 @@ def groupby_apply2(df_1, df_2, cols, f, tqdm=True):
     d_2 = {k: v for k,v in df_2.groupby(cols)}
 
     if tqdm:
-        from tqdm import tqdm_notebook
-        progress = tqdm_notebook
+        from tqdm.auto import tqdm
+        progress = tqdm
     else:
         progress = lambda x: x
 
@@ -264,18 +243,6 @@ def ndarray_to_dataframe(values, index):
     columns = pd.MultiIndex.from_product(levels, names=names)
     df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
     return df
-
-
-def apply_string_format(df, format_string):
-    """Fills in a python string template from column names. Columns
-    are automatically cast to string using `.astype(str)`.
-    """
-    keys = [x[1] for x in Formatter().parse(format_string)]
-    result = []
-    for values in df[keys].astype(str).values:
-        d = dict(zip(keys, values))
-        result.append(format_string.format(**d))
-    return result
 
 
 def uncategorize(df, as_codes=False):
@@ -326,7 +293,8 @@ def cast_cols(df, int_cols=tuple(), float_cols=tuple(), str_cols=tuple()):
 
 
 def replace_cols(df, **kwargs):
-    # careful with closure
+    """Apply function to update column with keyword argument name.
+    """
     d = {}
     for k, v in kwargs.items():
         def f(x, k=k, v=v):
@@ -348,28 +316,47 @@ def expand_sep(df, col, sep=','):
      .assign(**{col: values}))
 
 
-def csv_frame(files_or_search, tqdm=False, **kwargs):
-    """Convenience function, pass either a list of files or a 
-    glob wildcard search term.
+
+def csv_frame(files_or_search, progress=lambda x: x, add_file=None, file_pat=None, sort=True, 
+              include_cols=None, exclude_cols=None, **kwargs):
+    """Convenience function, pass either a list of files or a glob wildcard search term.
     """
-    from natsort import natsorted
     
     def read_csv(f):
         try:
-            return pd.read_csv(f, **kwargs)
+            df = pd.read_csv(f, **kwargs)
         except pd.errors.EmptyDataError:
             return None
+        if add_file is not None:
+            df[add_file] = f
+        if include_cols is not None:
+            include_pat = include_cols if isinstance(include_cols, str) else '|'.join(include_cols)
+            keep = [x for x in df.columns if re.match(include_pat, x)]
+            df = df[keep]
+        if exclude_cols is not None:
+            exclude_pat = exclude_cols if isinstance(exclude_cols, str) else '|'.join(exclude_cols)
+            keep = [x for x in df.columns if not re.match(exclude_pat, x)]
+            df = df[keep]
+        if file_pat is not None:
+            match = re.match(f'.*?{file_pat}.*', f)
+            if match is None:
+                raise ValueError(f'{file_pat} failed to match {f}')
+            if match.groupdict():
+                for k,v in match.groupdict().items():
+                    df[k] = v
+            else:
+                if add_file is None:
+                    raise ValueError(f'must provide `add_file` or named groups in {file_pat}')
+                first = match.groups()[0]
+                df[add_file] = first
+        return df
     
     if isinstance(files_or_search, str):
         files = natsorted(glob(files_or_search))
     else:
         files = files_or_search
 
-    if tqdm:
-        from tqdm import tqdm_notebook as tqdn
-        return pd.concat([read_csv(f) for f in tqdn(files)], sort=True)
-    else:
-        return pd.concat([read_csv(f) for f in files], sort=True)
+    return pd.concat([read_csv(f) for f in progress(files)], sort=sort)
 
 
 def gb_apply_parallel(df, cols, func, n_jobs=None, tqdm=True, backend='loky'):
@@ -410,6 +397,21 @@ def gb_apply_parallel(df, cols, func, n_jobs=None, tqdm=True, backend='loky'):
         results = pd.DataFrame(results, index=pd.Index(names, name=cols)).reset_index()
 
     return results
+
+
+def add_fstrings(df, **format_strings):
+    """Add strings formatted using columns as keys.
+    
+    For example, `df.pipe(add_str_format, well_tile='{well}_{tile}')`
+    """
+    format_strings = list(format_strings.items())
+    results = {}
+    for name, fmt in format_strings:
+        cols = [x[1] for x in string.Formatter().parse(fmt)]
+        rows = df[cols].to_dict('records')
+        results[name] = [fmt.format(**row) for row in rows]
+    return df.assign(**results)
+
 
 
 # NUMPY
@@ -479,7 +481,6 @@ def montage(arr, shape=None):
 
     return M
 
-
 def make_tiles(arr, m, n, pad=None):
     """Divide a stack of images into tiles of size m x n. If m or n is between 
     0 and 1, it specifies a fraction of the input size. If pad is specified, the
@@ -525,40 +526,34 @@ def trim(arr, return_slice=False):
 
 @decorator.decorator
 def applyIJ(f, arr, *args, **kwargs):   
-    """Apply a function that expects 2D input to the trailing two
-    dimensions of an array. The function must output an array whose shape
-    depends only on the input shape. 
     """
+    Decorator to apply a function that expects 2D input to the trailing two dimensions of an array.
+
+    Parameters:
+        f (function): The function to be decorated.
+        arr (numpy.ndarray): The input array to apply the function to.
+        *args: Additional positional arguments to be passed to the function.
+        **kwargs: Additional keyword arguments to be passed to the function.
+
+    Returns:
+        numpy.ndarray: Output array after applying the function.
+    """
+    # Get the height and width of the trailing two dimensions of the input array
     h, w = arr.shape[-2:]
+    
+    # Reshape the input array to a 3D array with shape (-1, h, w), where -1 indicates the product of all other dimensions
     reshaped = arr.reshape((-1, h, w))
 
-    # kwargs are not actually getting passed in?
+    # Apply the function f to each frame in the reshaped array, along with additional arguments and keyword arguments
+    # Note: kwargs are not actually getting passed in directly; this may need adjustment
     arr_ = [f(frame, *args, **kwargs) for frame in reshaped]
 
+    # Determine the output shape based on the input array shape and the shape of the output from the function f
     output_shape = arr.shape[:-2] + arr_[0].shape
+    
+    # Reshape the resulting list of arrays to the determined output shape
     return np.array(arr_).reshape(output_shape)
 
-def applyIJ_parallel(f, arr, n_jobs=-2, backend='threading',tqdm=False, *args, **kwargs):
-    """Apply a function that expects 2D input to the trailing two
-    dimensions of an array, parallelizing computation across 2D frames. 
-    The function must output an array whose shape depends only on the 
-    input shape. 
-    """
-    from joblib import Parallel,delayed
-
-    h, w = arr.shape[-2:]
-    reshaped = arr.reshape((-1, h, w))
-
-    if tqdm:
-        from tqdm import tqdm_notebook as tqdn
-        work = tqdn(reshaped,'frame')
-    else:
-        work = reshaped
-
-    arr_ = Parallel(n_jobs=n_jobs,backend=backend)(delayed(f)(frame, *args, **kwargs) for frame in work)
-
-    output_shape = arr.shape[:-2] + arr_[0].shape
-    return np.array(arr_).reshape(output_shape)
 
 def inscribe(mask):
     """Guess the largest axis-aligned rectangle inside mask. 
@@ -732,68 +727,82 @@ def join_stacks(*args):
         
     return output
 
-
-def max_project_zstack(stack,slices=5):
-    """Condense z-stack into a single slice using a simple maximum project through 
-    all slices for each channel individually. If slices is a list, then specifies the number 
-    of slices for each channel."""
-
-    if isinstance(slices,list):
-        channels = len(slices)
-
-        maxed = []
-        end_ch_slice = 0
-        for ch in range(len(slices)):
-            end_ch_slice += slices[ch]
-            ch_slices = stack[(end_ch_slice-slices[ch]):(end_ch_slice)]
-            ch_maxed = np.amax(ch_slices,axis=0)
-            maxed.append(ch_maxed)
-
-    else:
-        channels = int(stack.shape[-3]/slices)
-        assert len(stack) == int(slices)*channels, 'Input data must have leading dimension length slices*channels'
-
-        maxed = []
-        for ch in range(channels):
-            ch_slices = stack[(ch*slices):((ch+1)*slices)]
-            ch_maxed = np.amax(ch_slices,axis=0)
-            maxed.append(ch_maxed)
-
-    maxed = np.array(maxed)
-
-    return maxed
-
 # SCIKIT-IMAGE
 def regionprops(labeled, intensity_image):
-    """Supplement skimage.measure.regionprops with additional field `intensity_image_full` 
+    """
+    Supplement skimage.measure.regionprops with additional field `intensity_image_full` 
     containing multi-dimensional intensity image.
+
+    Args:
+        labeled (np.ndarray): Labeled segmentation mask defining objects.
+        intensity_image (np.ndarray): Intensity image.
+
+    Returns:
+        list: List of region properties objects.
     """
     import skimage.measure
 
+    # If intensity image has more than 2 dimensions, consider only the first channel
     if intensity_image.ndim == 2:
         base_image = intensity_image
     else:
         base_image = intensity_image[..., 0, :, :]
 
+    # Compute region properties using skimage.measure.regionprops
     regions = skimage.measure.regionprops(labeled, intensity_image=base_image)
 
+    # Iterate over regions and add the 'intensity_image_full' attribute
     for region in regions:
-        b = region.bbox
+        b = region.bbox  # Get bounding box coordinates
+        # Extract the corresponding sub-image from the intensity image and assign it to the 'intensity_image_full' attribute
         region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
 
     return regions
 
+
 def regionprops_multichannel(labeled, intensity_image):
-    """Format intensity image axes for compatability with updated skimage.measure.regionprops that allows multichannel
-    images. Somethings are faster than `ops.utils.regionprops`, others are slower.
+    """
+    Format intensity image axes for compatibility with updated skimage.measure.regionprops
+    that allows multichannel images. Some operations are faster than `ops.utils.regionprops`,
+    others are slower.
+
+    Args:
+        labeled (np.ndarray): Labeled segmentation mask defining objects.
+        intensity_image (np.ndarray): Multichannel intensity image.
+
+    Returns:
+        list: List of region properties objects.
     """
     import skimage.measure
 
+    # If intensity image has only 2 dimensions, consider it as a single-channel image
     if intensity_image.ndim == 2:
         base_image = intensity_image
     else:
-        base_image = np.moveaxis(intensity_image,range(intensity_image.ndim-2),range(-1,-(intensity_image.ndim-1),-1))
+        # Move the channel axis to the last position for compatibility with skimage.measure.regionprops
+        base_image = np.moveaxis(intensity_image, range(intensity_image.ndim-2), range(-1, -(intensity_image.ndim-1), -1))
         
+    # Compute region properties using skimage.measure.regionprops
     regions = skimage.measure.regionprops(labeled, intensity_image=base_image)
 
     return regions
+
+
+def match_size(image, target, order=None):
+    """
+    Resize the input image to match the size of the target image without changing the data range or type.
+
+    Args:
+        image (np.ndarray): Input image to be resized.
+        target (np.ndarray): Target image whose size the input image will be matched to.
+        order (int, optional): Order of interpolation. Default is None.
+
+    Returns:
+        np.ndarray: Resized image with the same data range and type as the input image.
+    """
+    from skimage.transform import resize
+
+    # Resize the input image to match the size of the target image
+    # Preserve the original data range and type
+    return (resize(image, target.shape, preserve_range=True, order=order)
+            .astype(image.dtype))

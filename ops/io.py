@@ -389,7 +389,7 @@ def save_stack(name, data, luts=None, display_ranges=None,
         data = data.astype(np.float32)
         # print('Cast float64 to float32')
 
-    if data.dtype == np.bool:
+    if data.dtype == np.bool_:
         data = 255 * data.astype(np.uint8)
 
     if data.dtype == np.int32:

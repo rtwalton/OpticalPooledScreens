@@ -4,76 +4,117 @@ from collections.abc import Iterable
 from itertools import product
 
 import skimage
-import skimage.registration
 import skimage.segmentation
-import skimage.feature
-import skimage.filters
+import skimage.morphology
+import skimage.registration
 import numpy as np
 import pandas as pd
-import scipy.stats
 
-from scipy import ndimage
+from scipy import ndimage as ndi
 
-import ops.io
-import ops.utils
+from . import utils
 
 
 # FEATURES
 def feature_table(data, labels, features, global_features=None):
-    """Apply functions in feature dictionary to regions in data 
-    specified by integer labels. If provided, the global feature
-    dictionary is applied to the full input data and labels. 
-
-    Results are combined in a dataframe with one row per label and
-    one column per feature.
     """
-    regions = ops.utils.regionprops(labels, intensity_image=data)
-    results = defaultdict(list)
-    for feature,func in features.items():
-        # check if iterable with first result
-        result_0 = func(regions[0])
-        if isinstance(result_0,Iterable):
-            if len(result_0)==1:
-                results[feature] = [func(region)[0] for region in regions]
-            else:
-                for result in map(func,regions):
-                    for index,value in enumerate(result):
-                        results[feature+'_{}'.format(index)].append(value)
-        else:
-            results[feature] = list(map(func,regions))
+    Apply functions in feature dictionary to regions in data specified by integer labels.
+    If provided, the global feature dictionary is applied to the full input data and labels.
 
+    Results are combined in a dataframe with one row per label and one column per feature.
+    
+    Args:
+        data (np.ndarray): Image data.
+        labels (np.ndarray): Labeled segmentation mask defining objects to extract features from.
+        features (dict): Dictionary of feature names and their corresponding functions.
+        global_features (dict, optional): Dictionary of global feature names and their corresponding functions.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing extracted features with one row per label and one column per feature.
+    """
+    # Extract regions from the labeled segmentation mask
+    regions = utils.regionprops(labels, intensity_image=data)
+    
+    # Initialize a defaultdict to store feature values
+    results = defaultdict(list)
+    
+    # Loop through each region and compute features
+    for region in regions:
+        for feature, func in features.items():
+            # Apply the feature function to the region and append the result to the corresponding feature list
+            results[feature].append(fix_uint16(func(region)))
+    
+    # If global features are provided, compute them and add them to the results
     if global_features:
         for feature, func in global_features.items():
-            results[feature] = func(data, labels)
+            # Apply the global feature function to the full input data and labels
+            results[feature] = fix_uint16(func(data, labels))
+
+    # Convert the results dictionary to a DataFrame
     return pd.DataFrame(results)
 
 def feature_table_multichannel(data, labels, features, global_features=None):
-    """Apply functions in feature dictionary to regions in data 
-    specified by integer labels. If provided, the global feature
-    dictionary is applied to the full input data and labels. 
-
-    Results are combined in a dataframe with one row per label and
-    one column per feature.
     """
-    regions = ops.utils.regionprops_multichannel(labels, intensity_image=data)
+    Apply functions in feature dictionary to regions in data specified by integer labels.
+    If provided, the global feature dictionary is applied to the full input data and labels.
+
+    Results are combined in a dataframe with one row per label and one column per feature.
+    
+    Args:
+        data (np.ndarray): Image data.
+        labels (np.ndarray): Labeled segmentation mask defining objects to extract features from.
+        features (dict): Dictionary of feature names and their corresponding functions.
+        global_features (dict, optional): Dictionary of global feature names and their corresponding functions.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing extracted features with one row per label and one column per feature.
+    """
+    # Extract regions from the labeled segmentation mask
+    regions = utils.regionprops_multichannel(labels, intensity_image=data)
+    
+    # Initialize a defaultdict to store feature values
     results = defaultdict(list)
-    for feature,func in features.items():
-        # check if iterable with first result
+    
+    # Loop through each feature and compute features for each region
+    for feature, func in features.items():
+        # Check if the result of applying the function to the first region is iterable
         result_0 = func(regions[0])
-        if isinstance(result_0,Iterable):
-            if len(result_0)==1:
+        if isinstance(result_0, Iterable):
+            if len(result_0) == 1:
+                # If the result is a single value, apply the function to each region and append the result to the corresponding feature list
                 results[feature] = [func(region)[0] for region in regions]
             else:
-                for result in map(func,regions):
-                    for index,value in enumerate(result):
-                        results[feature+'_{}'.format(index)].append(value)
+                # If the result is a sequence, apply the function to each region and append each element of the result to the corresponding feature list
+                for result in map(func, regions):
+                    for index, value in enumerate(result):
+                        results[f"{feature}_{index}"].append(value)
         else:
-            results[feature] = list(map(func,regions))
+            # If the result is not iterable, apply the function to each region and append the result to the corresponding feature list
+            results[feature] = list(map(func, regions))
 
+    # If global features are provided, compute them and add them to the results
     if global_features:
         for feature, func in global_features.items():
+            # Apply the global feature function to the full input data and labels
             results[feature] = func(data, labels)
+    
+    # Convert the results dictionary to a DataFrame
     return pd.DataFrame(results)
+
+
+def fix_uint16(x):
+    """
+    Pandas bug converts np.uint16 to np.int16!!! 
+    
+    Args:
+        x (Union[np.uint16, int]): Value to fix.
+    
+    Returns:
+        Union[int, np.uint16]: Fixed value.
+    """
+    if isinstance(x, np.uint16):
+        return int(x)
+    return x
 
 
 def build_feature_table(stack, labels, features, index):
@@ -104,310 +145,438 @@ def build_feature_table(stack, labels, features, index):
 
 
 def find_cells(nuclei, mask, remove_boundary_cells=True):
-    """Convert binary mask to cell labels, based on nuclei labels.
+    """
+    Convert binary mask to cell labels, based on nuclei labels.
 
     Expands labeled nuclei to cells, constrained to where mask is >0.
+
+    Parameters:
+        nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
+        mask (numpy.ndarray): Binary mask indicating valid regions for cell expansion.
+        remove_boundary_cells (bool, optional): Whether to remove cells touching the boundary. Default is True.
+
+    Returns:
+        numpy.ndarray: Labeled segmentation mask of cells.
     """
-    distance = ndimage.distance_transform_cdt(nuclei == 0)
-    try:
-        cells = skimage.segmentation.watershed(distance, nuclei, mask=mask)
-    except:
-        cells = skimage.morphology.watershed(distance, nuclei, mask=mask)
-    # remove cells touching the boundary
+    # Calculate distance transform of areas where nuclei are not present
+    distance = ndi.distance_transform_cdt(nuclei == 0)
+    
+    # Use watershed segmentation to expand nuclei labels to cells within the mask
+    cells = skimage.segmentation.watershed(distance, nuclei, mask=mask)
+    
+    # Remove cells touching the boundary if specified
     if remove_boundary_cells:
-        cut = np.concatenate([cells[0,:], cells[-1,:], 
-                              cells[:,0], cells[:,-1]])
+        # Identify cells touching the boundary
+        cut = np.concatenate([cells[0, :], cells[-1, :], cells[:, 0], cells[:, -1]])
+        # Set labels of boundary-touching cells to 0
         cells.flat[np.in1d(cells, np.unique(cut))] = 0
 
     return cells.astype(np.uint16)
 
-def label_erosion(labels):
-    regions = skimage.measure.regionprops(labels, intensity_image=labels)
-    eroded = np.zeros(labels.shape).astype('uint16')
-    for r in regions:
-        eroded[tuple(slice(r.bbox[start],r.bbox[stop]) for start,stop in [(0,2),(1,3)])] += skimage.morphology.erosion(np.pad(r.intensity_image,
-                                                                                                        1,mode='constant'))[1:-1,1:-1]
-
-    return eroded
 
 def find_peaks(data, n=5):
-    """Finds local maxima. At a maximum, the value is max - min in a 
-    neighborhood of width `n`. Elsewhere it is zero.
     """
-    from scipy.ndimage import filters
-    neighborhood_size = (1,)*(data.ndim-2) + (n,n)
+    Finds local maxima in the input data.
+    At a maximum, the value is max - min in a neighborhood of width `n`.
+    Elsewhere, it is zero.
+
+    Parameters:
+        data (numpy.ndarray): Input data.
+        n (int, optional): Width of the neighborhood for finding local maxima. Default is 5.
+
+    Returns:
+        peaks (numpy.ndarray): Local maxima scores.
+    """
+    # Import necessary modules and functions
+    from scipy import ndimage as ndi
+    import numpy as np
+    
+    # Define the maximum and minimum filters for finding local maxima
+    filters = ndi.filters
+    
+    # Define the neighborhood size based on the input data dimensions
+    neighborhood_size = (1,) * (data.ndim - 2) + (n, n)
+    
+    # Apply maximum and minimum filters to the data to find local maxima
     data_max = filters.maximum_filter(data, neighborhood_size)
     data_min = filters.minimum_filter(data, neighborhood_size)
+    
+    # Calculate the difference between maximum and minimum values to identify peaks
     peaks = data_max - data_min
+    
+    # Set values to zero where the original data is not equal to the maximum values
     peaks[data != data_max] = 0
     
-    # remove peaks close to edge
+    # Remove peaks close to the edge
     mask = np.ones(peaks.shape, dtype=bool)
     mask[..., n:-n, n:-n] = False
     peaks[mask] = 0
     
     return peaks
 
-def calculate_illumination_correction(files, smooth=None, rescale=True, threading=False, slicer=slice(None)):
-    """calculate illumination correction field for use with apply_illumination_correction 
-    Snake method. Equivalent to CellProfiler's CorrectIlluminationCalculate module with 
-    option "Regular", "All", "Median Filter"
-    Note: algorithm originally benchmarked using ~250 images per plate to calculate plate-wise
-    illumination correction functions (Singh et al. J Microscopy, 256(3):231-236, 2014)
-    """
-    from ops.io import read_stack as read
-
-    N = len(files)
-
-    global data
-
-    data = read(files[0])[slicer]/N
-
-    def accumulate_image(file):
-        global data
-        data += read(file)[slicer]/N
-
-    if threading:
-        from joblib import Parallel, delayed
-        Parallel(n_jobs=-1,require='sharedmem')(delayed(accumulate_image)(file) for file in files[1:])
-    else:
-        for file in files[1:]:
-            accumulate_image(file)
-
-    data = np.squeeze(data.astype(np.uint16))
-
-    if not smooth:
-        # default is 1/20th area of image
-        # smooth = (np.array(data.shape[-2:])/8).mean().astype(int)
-        smooth = int(np.sqrt((data.shape[-1]*data.shape[-2])/(np.pi*20)))
-
-    selem = skimage.morphology.disk(smooth)
-
-    median_filter = ops.utils.applyIJ(skimage.filters.median)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        smoothed = median_filter(data,selem,behavior='rank')
-
-    if rescale:
-        @ops.utils.applyIJ
-        def rescale_channels(data):
-            # use 2nd percentile for robust minimum
-            robust_min = np.quantile(data.reshape(-1),q=0.02)
-            robust_min = 1 if robust_min == 0 else robust_min
-            data = data/robust_min
-            data[data<1] = 1 
-            return data
-
-        smoothed = rescale_channels(smoothed)
-
-    return smoothed
-
-@ops.utils.applyIJ
-def rolling_ball_background_skimage(image, radius=100, ball=None, shrink_factor=None, smooth=None, **kwargs):
-    # from skimage.restoration import ball_kernel, rolling_ball
-    if ball is None:
-        ball = skimage.restoration.ball_kernel(radius,ndim=2)
-
-    if shrink_factor is None:
-        # Copied from ImageJ "Subtract Background" command.
-        if radius <= 10:
-            shrink_factor = 1
-            trim = 0.12 #; // trim 24% in x and y
-        elif radius <= 30:
-            shrink_factor = 2
-            trim = 0.12 #; // trim 24% in x and y
-        elif radius <= 100:
-            shrink_factor = 4
-            trim = 0.16 #; // trim 32% in x and y
-        else:
-            shrink_factor = 8
-            trim = 0.20 #; // trim 40% in x and y
-
-        n = int(ball.shape[0] * trim)
-        i0, i1 = n, ball.shape[0] - n
-        ball = ball[i0:i1, i0:i1]
-    
-    image_ = skimage.transform.rescale(image, 1./shrink_factor, 
-                   preserve_range=True).astype(image.dtype)
-
-    kernel = skimage.transform.rescale(ball, 1./shrink_factor, 
-           preserve_range=True).astype(ball.dtype)
-
-    background = skimage.restoration.rolling_ball(image_,kernel=kernel,**kwargs)
-
-    if smooth is not None:
-        background = skimage.filters.gaussian(background,sigma=smooth/shrink_factor,preserve_range=True)
-
-    background = skimage.transform.resize(background,image.shape,
-        preserve_range=True).astype(image.dtype)
-
-    return background
-
-def subtract_background(image, radius=100, ball=None, shrink_factor=None, smooth=None, **kwargs):
-    background = rolling_ball_background_skimage(image,radius=radius,ball=ball,
-        shrink_factor=shrink_factor, smooth=smooth, **kwargs)
-
-    mask = background>image
-    background[mask] = image[mask]
-    return image-background
-
-
-@ops.utils.applyIJ
+@utils.applyIJ
 def log_ndi(data, sigma=1, *args, **kwargs):
-    """Apply laplacian of gaussian to each image in a stack of shape
-    (..., I, J). 
-    Extra arguments are passed to scipy.ndimage.filters.gaussian_laplace.
-    Inverts output and converts back to uint16.
     """
-    f = scipy.ndimage.filters.gaussian_laplace
+    Apply Laplacian of Gaussian to each image in a stack of shape (..., I, J).
+    
+    Parameters:
+        data (numpy.ndarray): Input data.
+        sigma (float, optional): Standard deviation of the Gaussian kernel. Default is 1.
+        *args: Additional positional arguments passed to scipy.ndimage.filters.gaussian_laplace.
+        **kwargs: Additional keyword arguments passed to scipy.ndimage.filters.gaussian_laplace.
+    
+    Returns:
+        numpy.ndarray: Resulting images after applying Laplacian of Gaussian.
+    """
+    # Define the Laplacian of Gaussian filter function
+    f = ndi.filters.gaussian_laplace
+    
+    # Apply the filter to the data and invert the output
     arr_ = -1 * f(data.astype(float), sigma, *args, **kwargs)
+    
+    # Clip values to ensure they are within the valid range [0, 65535] and convert back to uint16
     arr_ = np.clip(arr_, 0, 65535) / 65535
     
-    # skimage precision warning 
+    # Suppress precision warning from skimage
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return skimage.img_as_uint(arr_)
+
 
 class Align:
     """Alignment redux, used by snakemake.
     """
     @staticmethod
     def normalize_by_percentile(data_, q_norm=70):
+        """Normalize data by the specified percentile.
+
+        Parameters
+        ----------
+        data_ : numpy array
+            Input image data.
+        q_norm : int, optional, default: 70
+            Percentile value for normalization.
+
+        Returns
+        -------
+        normed : numpy array
+            Normalized image data.
+        """
+        # Get the shape of the input data
         shape = data_.shape
+        # Replace the last two dimensions with a single dimension to allow percentile calculation
         shape = shape[:-2] + (-1,)
+        # Calculate the q_normth percentile along the last two dimensions of the data
         p = np.percentile(data_, q_norm, axis=(-2, -1))[..., None, None]
+        # Normalize the data by dividing it by the calculated percentile values
         normed = data_ / p
+        # Return the normalized data
         return normed
 
     @staticmethod
-    @ops.utils.applyIJ
+    @utils.applyIJ
     def filter_percentiles(data, q1, q2):
-        """Replaces data outside of percentile range [q1, q2]
-        with uniform noise over the range [q1, q2]. Useful for 
-        eliminating alignment artifacts due to bright features or 
-        regions of zeros.
+        """Replace data outside of the percentile range [q1, q2] with uniform noise.
+
+        Parameters
+        ----------
+        data : numpy array
+            Input image data.
+        q1 : int
+            Lower percentile threshold.
+        q2 : int
+            Upper percentile threshold.
+
+        Returns
+        -------
+        filtered : numpy array
+            Filtered image data.
         """
+        # Calculate the q1th and q2th percentiles of the input data
         x1, x2 = np.percentile(data, [q1, q2])
+        # Create a mask where values are outside the range [x1, x2]
         mask = (x1 > data) | (x2 < data)
+        # Fill the masked values with uniform noise in the range [x1, x2] using the fill_noise function
         return Align.fill_noise(data, mask, x1, x2)
 
     @staticmethod
-    @ops.utils.applyIJ
+    @utils.applyIJ
     def filter_values(data, x1, x2):
-        """Replaces data outside of value range [x1, x2]
-        with uniform noise over the range [x1, x2]. Useful for 
-        eliminating alignment artifacts due to bright features or 
-        regions of zeros.
+        """Replace data outside of the value range [x1, x2] with uniform noise.
+
+        Parameters
+        ----------
+        data : numpy array
+            Input image data.
+        x1 : int
+            Lower value threshold.
+        x2 : int
+            Upper value threshold.
+
+        Returns
+        -------
+        filtered : numpy array
+            Filtered image data.
         """
+        # Create a mask where values are either less than x1 or greater than x2
         mask = (x1 > data) | (x2 < data)
+        # Fill the masked values with uniform noise in the range [x1, x2] using the fill_noise function
         return Align.fill_noise(data, mask, x1, x2)
+
 
     @staticmethod
     def fill_noise(data, mask, x1, x2):
+        """Fill masked areas of data with uniform noise.
+
+        Parameters
+        ----------
+        data : numpy array
+            Input image data.
+        mask : numpy array
+            Boolean mask indicating areas to be replaced with noise.
+        x1 : int
+            Lower threshold value.
+        x2 : int
+            Upper threshold value.
+
+        Returns
+        -------
+        filtered : numpy array
+            Filtered image data.
+        """
+         # Make a copy of the original data
         filtered = data.copy()
+        # Initialize a random number generator with seed 0
         rs = np.random.RandomState(0)
+        # Replace the masked values with uniform noise generated in the range [x1, x2]
         filtered[mask] = rs.uniform(x1, x2, mask.sum()).astype(data.dtype)
-        return filtered        
+        # Return the filtered data
+        return filtered
 
     @staticmethod
     def calculate_offsets(data_, upsample_factor):
+        """Calculate offsets between images using phase cross-correlation.
+
+        Parameters
+        ----------
+        data_ : numpy array
+            Image data.
+        upsample_factor : int
+            Upsampling factor for cross-correlation.
+
+        Returns
+        -------
+        offsets : numpy array
+            Offset values between images.
+        """
+        # Set the target frame as the first frame in the data
         target = data_[0]
+        # Initialize an empty list to store offsets
         offsets = []
+        # Iterate through each frame in the data
         for i, src in enumerate(data_):
+            # If it's the first frame, add a zero offset
             if i == 0:
                 offsets += [(0, 0)]
             else:
-                try:
-                    offset, _, _ = skimage.registration.phase_cross_correlation(
-                                    src, target, upsample_factor=upsample_factor)
-                except: 
-                    offset, _, _ = skimage.feature.register_translation(
-                                    src, target, upsample_factor=upsample_factor)
+                # Calculate the offset between the current frame and the target frame
+                offset, _, _ = skimage.registration.phase_cross_correlation(
+                                src, target, upsample_factor=upsample_factor)
+                # Add the offset to the list
                 offsets += [offset]
+        # Convert the list of offsets to a numpy array and return
         return np.array(offsets)
 
     @staticmethod
     def apply_offsets(data_, offsets):
+        """Apply offsets to image data.
+
+        Parameters
+        ----------
+        data_ : numpy array
+            Image data.
+        offsets : numpy array
+            Offset values to be applied.
+
+        Returns
+        -------
+        warped : numpy array
+            Warped image data.
+        """
+        # Initialize an empty list to store warped frames
         warped = []
+        # Iterate through each frame and its corresponding offset
         for frame, offset in zip(data_, offsets):
+            # If the offset is zero, add the frame as it is
             if offset[0] == 0 and offset[1] == 0:
                 warped += [frame]
             else:
-                # skimage has a weird (i,j) <=> (x,y) convention
+                # Otherwise, apply a similarity transform to warp the frame based on the offset
                 st = skimage.transform.SimilarityTransform(translation=offset[::-1])
                 frame_ = skimage.transform.warp(frame, st, preserve_range=True)
+                # Add the warped frame to the list
                 warped += [frame_.astype(data_.dtype)]
-
+        # Convert the list of warped frames to a numpy array and return
         return np.array(warped)
 
     @staticmethod
     def align_within_cycle(data_, upsample_factor=4, window=1, q1=0, q2=90):
-        filtered = Align.filter_percentiles(Align.apply_window(data_, window), 
-            q1=q1, q2=q2)
+        """Align images within the same cycle.
 
+        Parameters
+        ----------
+        data_ : numpy array
+            Image data.
+        upsample_factor : int, optional, default: 4
+            Upsampling factor for cross-correlation.
+        window : int, optional, default: 1
+            Size of the window to apply during alignment.
+        q1 : int, optional, default: 0
+            Lower percentile threshold.
+        q2 : int, optional, default: 90
+            Upper percentile threshold.
+
+        Returns
+        -------
+        aligned : numpy array
+            Aligned image data.
+        """
+        # Filter the input data based on percentiles
+        filtered = Align.filter_percentiles(Align.apply_window(data_, window), q1=q1, q2=q2)
+        # Calculate offsets using the filtered data
         offsets = Align.calculate_offsets(filtered, upsample_factor=upsample_factor)
-
+        # Apply the calculated offsets to the original data and return the result
         return Align.apply_offsets(data_, offsets)
 
     @staticmethod
-    def align_between_cycles(data, channel_index, upsample_factor=4, window=1,
-    		return_offsets=False):
-        # offsets from target channel
+    def align_between_cycles(data, channel_index, upsample_factor=4, window=1, return_offsets=False):
+        """Align images between different cycles.
+
+        Parameters
+        ----------
+        data : numpy array
+            Image data.
+        channel_index : int
+            Index of the channel to align between cycles.
+        upsample_factor : int, optional, default: 4
+            Upsampling factor for cross-correlation.
+        window : int, optional, default: 1
+            Size of the window to apply during alignment.
+        return_offsets : bool, optional, default: False
+            Whether to return the calculated offsets.
+
+        Returns
+        -------
+        aligned : numpy array
+            Aligned image data.
+        offsets : numpy array, optional
+            Calculated offsets if return_offsets is True.
+        """
+        # Calculate offsets from the target channel
         target = Align.apply_window(data[:, channel_index], window)
         offsets = Align.calculate_offsets(target, upsample_factor=upsample_factor)
 
-        # apply to all channels
+        # Apply the calculated offsets to all channels
         warped = []
         for data_ in data.transpose([1, 0, 2, 3]):
             warped += [Align.apply_offsets(data_, offsets)]
 
+        # Transpose the array back to its original shape
         aligned = np.array(warped).transpose([1, 0, 2, 3])
+
+        # Return aligned data with offsets if requested
         if return_offsets:
-        	return aligned, offsets
+            return aligned, offsets
         else:
-        	return aligned
+            return aligned
+
 
     @staticmethod
     def apply_window(data, window):
+        """Apply a window to image data.
+
+        Parameters
+        ----------
+        data : numpy array
+            Image data.
+        window : int
+            Size of the window to apply.
+
+        Returns
+        -------
+        filtered : numpy array
+            Filtered image data.
+        """
+        # Extract height and width dimensions from the last two axes of the data shape
         height, width = data.shape[-2:]
+
+        # Define a function to find the border based on the window size
         find_border = lambda x: int((x/2.) * (1 - 1/float(window)))
+
+        # Calculate border indices
         i, j = find_border(height), find_border(width)
+
+        # Return the data with the border cropped out
         return data[..., i:height - i, j:width - j]
 
 
-# SEGMENT
+
 def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
-                score=lambda r: r.mean_intensity,smooth=1.35,
-                method='mean'):
-    """radius determines neighborhood for local mean thresholding, 
-    smooth determines gaussian kernel for smoothing prior to watershed.
+                score=lambda r: r.mean_intensity,
+                smooth=1.35):
     """
-    mask = binarize(dapi, radius, area_min, method=method)
+    Segment nuclei from DAPI stain using various parameters and filters.
+
+    Parameters:
+        dapi (numpy.ndarray): Input DAPI image.
+        threshold (float): Threshold for mean intensity to segment nuclei.
+        radius (int, optional): Radius of disk used in local mean thresholding to identify foreground. Default is 15.
+        area_min (int, optional): Minimum area for retaining nuclei after segmentation. Default is 50.
+        area_max (int, optional): Maximum area for retaining nuclei after segmentation. Default is 500.
+        score (function, optional): Function to calculate region score. Default is lambda r: r.mean_intensity.
+        smooth (float, optional): Size of Gaussian kernel used to smooth the distance map to foreground prior to watershedding. Default is 1.35.
+
+    Returns:
+        result (numpy.ndarray): Labeled segmentation mask of nuclei.
+    """
+
+    # Binarize DAPI image to identify foreground
+    mask = binarize(dapi, radius, area_min)
+    
+    # Label connected components in the binary mask
     labeled = skimage.measure.label(mask)
+    
+    # Filter labeled regions based on intensity score and threshold
     labeled = filter_by_region(labeled, score, threshold, intensity_image=dapi) > 0
 
-    # only fill holes below minimum area
-    filled = ndimage.binary_fill_holes(labeled)
-    difference = skimage.measure.label(filled!=labeled)
+    # Fill holes in the labeled mask
+    filled = ndi.binary_fill_holes(labeled)
+    
+    # Label the differences between filled and original labeled regions
+    difference = skimage.measure.label(filled != labeled)
 
+    # Identify regions with changes in area and update labeled mask
     change = filter_by_region(difference, lambda r: r.area < area_min, 0) > 0
     labeled[change] = filled[change]
 
+    # Apply watershed algorithm to refine segmentation
     nuclei = apply_watershed(labeled, smooth=smooth)
 
+    # Filter resulting nuclei by area range
     result = filter_by_region(nuclei, lambda r: area_min < r.area < area_max, threshold)
 
     return result
 
+
 def find_foci(data, radius=3, threshold=10, remove_border_foci=False):
     tophat = skimage.morphology.white_tophat(data,selem=skimage.morphology.disk(radius))
-    tophat_log = ops.process.log_ndi(tophat, sigma=radius)
+    print("finding foci")
+    tophat_log = log_ndi(tophat, sigma=radius)
 
     mask = tophat_log > threshold
     mask = skimage.morphology.remove_small_objects(mask,min_size=(radius**2))
     labeled = skimage.measure.label(mask)
-    labeled = ops.process.apply_watershed(labeled,smooth=1)
+    labeled = apply_watershed(labeled,smooth=1)
 
     if remove_border_foci:
         border_mask = data>0
@@ -422,63 +591,21 @@ def remove_border(labels, mask, dilate=5):
     labels.flat[np.in1d(labels,remove)] = 0
     return labels
 
-# def find_tubulin_background(tubulin, nuclei, threshold, var_size=10, smooth=5, var_threshold=20000,
-#                 radius=15, area_min=500, area_max=10000, score=lambda r: r.mean_intensity,
-#                 method='otsu',**kwargs):
-#     """radius determines neighborhood for local mean thresholding, 
-#     smooth determines gaussian kernel for smoothing prior to watershed.
-#     """
-
-#     def var_filter(arr, size):
-#         c1 = ndimage.filters.uniform_filter(arr, size)
-#         c2 = ndimage.filters.uniform_filter(arr*arr, size)
-#         return ((c2 - c1*c1))
-
-#     # smoothed variance filter to enhave contrast
-#     var = var_filter(tubulin.astype('float'),var_size)
-#     preprocess = ndimage.filters.gaussian_filter(var,sigma=smooth)
-#     preprocess = np.clip(preprocess,0,65535).astype('uint16')
-
-#     # binarize with a local otsu threshold, keep only regions above variance threshold
-#     mask = binarize(preprocess, radius, area_min, method=method,**kwargs )
-#     labeled = skimage.measure.label(mask)
-#     labeled = filter_by_region(labeled, score, threshold=lambda x:var_threshold, intensity_image=preprocess) > 0
-
-#     # add areas labeled as nuclei
-#     background = (nuclei +labeled)>0
-
-#     # fill holes below minimum area or above intensity threshold
-#     filled = ndimage.binary_fill_holes(background)
-#     difference = skimage.measure.label(filled!=background)
-#     change = filter_by_region(difference, lambda r: ((r.area < area_min) | (r.mean_intensity>threshold)), 0, intensity_image=tubulin) > 0
-#     background[change] = filled[change]
-
-#     return background
-
-def binarize(image, radius, min_size,method='mean',percentile=0.5):
+def binarize(image, radius, min_size):
     """Apply local mean threshold to find outlines. Filter out
     background shapes. Otsu threshold on list of region mean intensities will remove a few
     dark cells. Could use shape to improve the filtering.
     """
+    dapi = skimage.img_as_ubyte(image)
     # slower than optimized disk in ImageJ
     # scipy.ndimage.uniform_filter with square is fast but crappy
     selem = skimage.morphology.disk(radius)
-    
-    dapi = skimage.img_as_ubyte(image)
-
-    if method=='otsu':
-        filtered = skimage.filters.rank.otsu(dapi, selem=selem)
-    elif method=='percentile':
-        filtered = skimage.filters.rank.percentile(dapi,selem=selem,p0=percentile)
-    elif method=='mean':
-        filtered = skimage.filters.rank.mean(dapi, selem=selem)
-    else:
-        raise ValueError(f'method="{method}" not supported for ops.process.binarize')
-
-    mask = dapi > filtered
+    mean_filtered = skimage.filters.rank.mean(dapi, selem=selem)
+    mask = dapi > mean_filtered
     mask = skimage.morphology.remove_small_objects(mask, min_size=min_size)
 
     return mask
+
 
 def filter_by_region(labeled, score, threshold, intensity_image=None, relabel=True):
     """Apply a filter to label image. The `score` function takes a single region 
@@ -488,14 +615,8 @@ def filter_by_region(labeled, score, threshold, intensity_image=None, relabel=Tr
     determine the minimum score at which a region is kept.
     If `relabel` is true, the regions are relabeled starting from 1.
     """
-    from ops.features import masked
-
     labeled = labeled.copy().astype(int)
-    if intensity_image is None:
-        regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
-    else:
-        regions = ops.utils.regionprops(labeled,intensity_image=intensity_image)
-    
+    regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
     scores = np.array([score(r) for r in regions])
 
     if all([s in (True, False) for s in scores]):
@@ -513,22 +634,16 @@ def filter_by_region(labeled, score, threshold, intensity_image=None, relabel=Tr
 
 
 def apply_watershed(img, smooth=4):
-    distance = ndimage.distance_transform_edt(img)
+    distance = ndi.distance_transform_edt(img)
     if smooth > 0:
         distance = skimage.filters.gaussian(distance, sigma=smooth)
-    local_max_indices = skimage.feature.peak_local_max(
-                    distance, footprint=np.ones((3, 3)), 
+    local_max = skimage.feature.peak_local_max(
+                    distance, indices=False, footprint=np.ones((3, 3)), 
                     exclude_border=False)
-    local_max = np.zeros_like(img,dtype=bool)
-    local_max[tuple(local_max_indices.T)] = True
 
-    markers = ndimage.label(local_max)[0]
-    try:
-        result = skimage.segmentation.watershed(-distance, markers, mask=img)
-    except:
-        result = skimage.morphology.watershed(-distance, markers, mask=img)
+    markers = ndi.label(local_max)[0]
+    result = skimage.segmentation.watershed(-distance, markers, mask=img)
     return result.astype(np.uint16)
-
 
 
 def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=False):
@@ -537,7 +652,7 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
     positions : N x 2 (n, i, j)
     """
     
-    # @ops.utils.memoize
+    # @utils.memoize
     def make_alpha(s, edge=0.95, edge_width=0.02):
         """Unity in center, drops off near edge
         :param s: shape
