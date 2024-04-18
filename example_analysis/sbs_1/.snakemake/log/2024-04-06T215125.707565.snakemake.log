@@ -1,0 +1,12 @@
+Building DAG of jobs...
+MissingInputException in line 62 of /lab/barcheese01/screens/baker/sbs_0/baker_sbs_0.smk:
+Missing input files for rule align:
+input_sbs/process/input/10X/multidimensional/10X_c4-SBS-4_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c3-SBS-3_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c7-SBS-7_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c1-SBS-1_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c2-SBS-2_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c5-SBS-5_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c8-SBS-8_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c6-SBS-6_A1_Tile-0.sbs.tif
+input_sbs/process/input/10X/multidimensional/10X_c9-SBS-9_A1_Tile-0.sbs.tif

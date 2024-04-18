@@ -1,0 +1,4 @@
+ImportError in line 3 of /lab/barcheese01/screens/baker/sbs_0/baker_sbs_0.smk:
+cannot import name 'Align' from 'ops.process' (/lab/barcheese01/mdiberna/OpticalPooledScreens/ops/process.py)
+  File "/lab/barcheese01/screens/baker/sbs_0/baker_sbs_0.smk", line 3, in <module>
+  File "/lab/barcheese01/mdiberna/OpticalPooledScreens/ops/firesnake.py", line 19, in <module>
