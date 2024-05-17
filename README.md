@@ -6,8 +6,6 @@ This repository is currently undergoing restructuring and a more complete README
 
 ## Installation (OSX)
 
-**WARNING: many versions of dependencies will have trouble installing on Python 3.8. It is currently recommended to use Python 3.6. Setting up a Python 3.6 conda environment may be a convenient solution, set-up guide [here](https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#managing-python).**
-
 Download the OpticalPooledScreens directory (e.g., on Github use the green "Clone or download" button, then "Download ZIP").
 
 In Terminal, go to the OpticalPooledScreens project directory and create a Python 3 virtual environment using a command like:
@@ -34,6 +32,3 @@ This will install based on the `requirements_venv_ops_new_18_04_2024.txt`, which
 ## Running
 
 The `example_analysis/` directory contains the majorit of the required code to run the analysis. Within each subfolder, there are Jupyter notebooks that accompany the pre-processing, sbs, and ph steps of the analysis.
-
-The triangle hash and merging steps will be added soon, along with corresponding Jupyter notebooks.
-
