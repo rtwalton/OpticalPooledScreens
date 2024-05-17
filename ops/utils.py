@@ -14,41 +14,94 @@ from natsort import natsorted
 import numpy as np
 import pandas as pd
 
-def combine_tables(tag, output_filetype='hdf', subdir='process', n_jobs=1, output_dir=None, usecols=None):
+# def combine_tables(tag,output_filetype='hdf',subdir_read='process',n_jobs=1,usecols=None):
     
-    files = glob(f'{subdir}/*{tag}.csv')
-    
+#     files = glob('{subdir_read}/*.{tag}.csv'.format(subdir_read=subdir_read,tag=tag))
+
+#     from tqdm.notebook import tqdm
+
+#     def get_file(f,usecols):
+#         try:
+#             return pd.read_csv(f,usecols=usecols)
+#         except pd.errors.EmptyDataError:
+#             pass
+
+#     if n_jobs != 1:
+#         from joblib import Parallel,delayed
+#         arr = Parallel(n_jobs=n_jobs)(delayed(get_file,usecols=usecols)(file) for file in tqdm(files))
+#     else:
+#         arr = [get_file(file,usecols) for file in files]
+
+#     df = pd.concat(arr)
+#     if output_filetype=='csv':
+#         df.to_csv(tag+'.csv')
+#     else:
+#         df.to_hdf(tag + '.hdf', tag, mode='w')
+
+def combine_tables(tag, output_filetype='hdf', subdir_read='process', n_jobs=1, usecols=None, subdir_write=None):
+
+    from tqdm.notebook import tqdm
+
+    files = glob(os.path.join(subdir_read, f'*.{tag}.csv'))
+
     def get_file(f, usecols):
         try:
             return pd.read_csv(f, usecols=usecols)
         except pd.errors.EmptyDataError:
-            print(f"Empty data in file: {f}")
             pass
 
-    if tag == 'bases':
-        # Process bases files separately for each prefix tag
-        prefix_tags = set([os.path.basename(file).split('_')[1] for file in files])
-        for prefix_tag in prefix_tags:
-            prefix_files = [file for file in files if prefix_tag in file]
-            arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in prefix_files)
-            df = pd.concat(arr)
-            output_file = f"{output_dir}/{prefix_tag}_{tag}.{output_filetype}"
-            if output_filetype == 'csv':
-                df.to_csv(output_file)
-            else:
-                df.to_hdf(output_file, tag, mode='w')
-            print(f"Saved {output_file}")
-
+    if n_jobs != 1:
+        from joblib import Parallel, delayed
+        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in tqdm(files))
     else:
-        # For other tags, combine all files into a single output file
-        arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in files)
-        df = pd.concat(arr)
-        output_file = f"{output_dir}/{tag}.{output_filetype}"
-        if output_filetype == 'csv':
-            df.to_csv(output_file)
-        else:
-            df.to_hdf(output_file, tag, mode='w')
-        print(f"Saved {output_file}")
+        arr = [get_file(file, usecols) for file in files]
+
+    df = pd.concat(arr)
+    if subdir_write is None:
+        subdir_write = subdir_read
+    output_path = os.path.join(subdir_write, f"{tag}.{output_filetype}")
+
+    if output_filetype == 'csv':
+        df.to_csv(output_path)
+    else:
+        df.to_hdf(output_path, tag, mode='w')
+
+        
+# def combine_tables_intermediate(tag, output_filetype='hdf', subdir='process', n_jobs=1, output_dir=None, usecols=None):
+    
+#     files = glob(f'{subdir}/*{tag}.csv')
+    
+#     def get_file(f, usecols):
+#         try:
+#             return pd.read_csv(f, usecols=usecols)
+#         except pd.errors.EmptyDataError:
+#             print(f"Empty data in file: {f}")
+#             pass
+
+#     if tag == 'bases':
+#         # Process bases files separately for each prefix tag
+#         prefix_tags = set([os.path.basename(file).split('_')[1] for file in files])
+#         for prefix_tag in prefix_tags:
+#             prefix_files = [file for file in files if prefix_tag in file]
+#             arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in prefix_files)
+#             df = pd.concat(arr)
+#             output_file = f"{output_dir}/{prefix_tag}_{tag}.{output_filetype}"
+#             if output_filetype == 'csv':
+#                 df.to_csv(output_file)
+#             else:
+#                 df.to_hdf(output_file, tag, mode='w')
+#             print(f"Saved {output_file}")
+
+#     else:
+#         # For other tags, combine all files into a single output file
+#         arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in files)
+#         df = pd.concat(arr)
+#         output_file = f"{output_dir}/{tag}.{output_filetype}"
+#         if output_filetype == 'csv':
+#             df.to_csv(output_file)
+#         else:
+#             df.to_hdf(output_file, tag, mode='w')
+#         print(f"Saved {output_file}")
 
 
 def format_input(input_table, n_jobs=1, **kwargs):
