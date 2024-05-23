@@ -314,6 +314,31 @@ def transform_medians(X,correction_quartile=0):
     Y = W.dot(X.T).T.astype(int)
     return Y, W
 
+
+def normalize_bases(df):
+    """
+    Normalize the channel intensities by the median brightness of each channel in all spots.
+
+    Parameters:
+    -----------
+    df : pandas DataFrame
+        DataFrame containing spot intensity data.
+
+    Returns:
+    --------
+    pandas DataFrame
+        DataFrame with normalized intensity values.
+    """
+
+    # Calculate median brightness of each channel
+    df_medians = df.groupby('channel').intensity.median()
+
+    # Normalize intensity values by dividing by respective channel median
+    df_out = df.copy()
+    df_out.intensity = df.apply(lambda x: x.intensity / df_medians[x.channel], axis=1)
+
+    return df_out
+
 def call_barcodes(df_bases, Y, cycles=12, channels=4):
     """
     Assign barcode sequences to reads based on the transformed base signal obtained from sequencing data.

@@ -15,8 +15,13 @@ BASES = 'GTAC'
 # Define threshold values
 THRESHOLD_READS = 315  # Threshold for detecting reads
 THRESHOLD_DAPI = 1200  # Threshold for segmenting nuclei based on dapi signal
-THRESHOLD_CELL = {'A1': 750,'A2': 750,'A3': 750,'B1': 750,'B2': 750,'B3': 750}  # Threshold for segmenting cells on sbs background signal, specific to well 'A1'
+THRESHOLD_CELL = 500  # Threshold for segmenting cells on sbs background signal, specific to well 'A1'
 NUCLEUS_AREA = (0.25 * 150, 0.25 * 800)  # Tuple representing nucleus area
+DAPI_INDEX = 0 # 0-indexed, 0="Dapi" channel from sequencing
+CYTO_CYCLE = -1 # -1 is the last cycle
+CYTO_CHANNEL = 4 # 0-indexed, 4="C" channel from sequencing
+DIAMETER = 14 # Calculated by running CellPose calibration (e.g., from their GUI)
+SEGMENT_METHOD = "cellpose"
 Q_MIN = 0  # Minimum Levenshtein distance
 
 # Define plate layout
@@ -177,58 +182,104 @@ rule max_filter:
             remove_index=0
         )
 
-# Segment nuclei from the DAPI channel
-rule segment_nuclei:
+# Segments cells and nuclei using pre-defined methods
+rule segment:
     input:
-        # Input file path for the aligned image data
-        'process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif'
+        # Generate input file paths for each cycle using list comprehension
+        ([[preprocess_pattern.format(cycle=SBS_CYCLES[cycle])] for cycle in range(0, len(SBS_CYCLES))])
     output:
-        # Output file path for the segmented nuclei
-        'process_sbs/images/10X_{well}_Tile-{tile}.nuclei.tif'
-    run:
-        # Read the input data
-        data = read(input[0])
-        # Print the shape of the input data
-        print(data.shape)
-        # Call the Snake segment_nuclei method with specified parameters
-        Snake.segment_nuclei(
-            # Output file path for the segmented nuclei
-            output=output, 
-            # Image data with the DAPI channel
-            data=data[0], 
-            # Threshold for mean DAPI intensity
-            threshold=THRESHOLD_DAPI,
-            # Minimum area for retaining nuclei
-            area_min=NUCLEUS_AREA[0], 
-            # Maximum area for retaining nuclei
-            area_max=NUCLEUS_AREA[1]
-        )
-
-# Segment cells from aligned data
-rule segment_cells:
-    input:
-        # Input file paths for the aligned image data and segmented nuclei
-        'process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif',
-        'process_sbs/images/10X_{well}_Tile-{tile}.nuclei.tif'
-    output:
-        # Output file path for the segmented cells
+        # Define output file paths for the segmented nuclei and cells
+        'process_sbs/images/10X_{well}_Tile-{tile}.nuclei.tif',
         'process_sbs/images/10X_{well}_Tile-{tile}.cells.tif'
     run:
-        # Read the input data
-        data = read(input[0])
-        # Print the shape of the input data
-        print(data.shape)
-        # Call the Snake segment_cells method with specified parameters
-        Snake.segment_cells(
-            # Output file path for the segmented cells
-            output=output, 
-            # Image data for cell boundary segmentation
-            data=data[0], 
-            # Labeled segmentation mask of nuclei
-            nuclei=input[1], 
-            # Threshold used to identify cell boundaries
-            threshold=THRESHOLD_CELL[wildcards.well]
-        )
+        # Check which segmentation method to use
+        if SEGMENT_METHOD == 'cell_2019':
+            # Read the input data for the first cycle
+            data = read(input[0])
+            # Print the shape of the input data for debugging purposes
+            print(data.shape)
+            # Perform segmentation using the cell_2019 method
+            Snake.segment_cell_2019(
+                output=output,  # Output file paths for the segmented nuclei and cells
+                data=data,  # Input data
+                nuclei_threshold=THRESHOLD_DAPI,  # Threshold for detecting nuclei
+                nuclei_area_min=NUCLEUS_AREA[0],  # Minimum area for nuclei
+                nuclei_area_max=NUCLEUS_AREA[1],  # Maximum area for nuclei
+                cell_threshold=THRESHOLD_CELL,  # Threshold for detecting cells
+            )
+        elif SEGMENT_METHOD == 'cellpose':
+            # Use the last cycle for segmentation
+            cycle = CYTO_CYCLE
+            # Read the input data for the specified cycle
+            data = ops.io.read_stack(input[0])[cycle]
+            # Print the shape of the input data for debugging purposes
+            print(data.shape)
+            # Perform segmentation using the cellpose method
+            Snake.segment_cellpose(
+                output=output,  # Output file paths for the segmented nuclei and cells
+                data=data,  # Input data
+                dapi_index=DAPI_INDEX,  # Index of the DAPI channel
+                cyto_index=CYTO_CHANNEL,  # Index of the cytoplasm channel
+                diameter=DIAMETER,  # Diameter for cellpose segmentation
+            )
+        else:
+            # Raise an error if the segmentation method is not recognized
+            error = ('config entry SEGMENT_METHOD must be "cell_2019" or "cellpose", '
+                     f'not {SEGMENT_METHOD}')
+            raise ValueError(error)
+
+# Segment cells and nuclei from the DAPI channel
+# rule segment_nuclei:
+#     input:
+#         # Input file path for the aligned image data
+#         'process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif'
+#     output:
+#         # Output file path for the segmented nuclei
+#         'process_sbs/images/10X_{well}_Tile-{tile}.nuclei.tif'
+#     run:
+#         # Read the input data
+#         data = read(input[0])
+#         # Print the shape of the input data
+#         print(data.shape)
+#         # Call the Snake segment_nuclei method with specified parameters
+#         Snake.segment_nuclei(
+#             # Output file path for the segmented nuclei
+#             output=output, 
+#             # Image data with the DAPI channel
+#             data=data[0], 
+#             # Threshold for mean DAPI intensity
+#             threshold=THRESHOLD_DAPI,
+#             # Minimum area for retaining nuclei
+#             area_min=NUCLEUS_AREA[0], 
+#             # Maximum area for retaining nuclei
+#             area_max=NUCLEUS_AREA[1]
+#         )
+
+# # Segment cells from aligned data
+# rule segment_cells:
+#     input:
+#         # Input file paths for the aligned image data and segmented nuclei
+#         'process_sbs/images/10X_{well}_Tile-{tile}.aligned.tif',
+#         'process_sbs/images/10X_{well}_Tile-{tile}.nuclei.tif'
+#     output:
+#         # Output file path for the segmented cells
+#         'process_sbs/images/10X_{well}_Tile-{tile}.cells.tif'
+#     run:
+#         # Read the input data
+#         data = read(input[0])
+#         # Print the shape of the input data
+#         print(data.shape)
+#         # Call the Snake segment_cells method with specified parameters
+#         Snake.segment_cells(
+#             # Output file path for the segmented cells
+#             output=output, 
+#             # Image data for cell boundary segmentation
+#             data=data[0], 
+#             # Labeled segmentation mask of nuclei
+#             nuclei=input[1], 
+#             # Threshold used to identify cell boundaries
+#             threshold=THRESHOLD_CELL[wildcards.well]
+#         )
 
 # Extract bases from peaks
 rule extract_bases:
@@ -277,8 +328,6 @@ rule call_reads:
             df_bases=input[0], 
             # Array containing peak information
             peaks=input[1], 
-            # Flag indicating if channel minimum should be subtracted from intensity
-            subtract_channel_min=True
         )
 
 # Call cells

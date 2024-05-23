@@ -4,16 +4,18 @@ from collections.abc import Iterable
 from itertools import product
 
 import skimage
-import skimage.segmentation
-import skimage.morphology
 import skimage.registration
+import skimage.segmentation
+import skimage.feature
+import skimage.filters
 import numpy as np
 import pandas as pd
+import scipy.stats
 
-from scipy import ndimage as ndi
+from scipy import ndimage
 
-from . import utils
-
+import ops.io
+import ops.utils
 
 # FEATURES
 def feature_table(data, labels, features, global_features=None):
@@ -214,7 +216,195 @@ def find_peaks(data, n=5):
     
     return peaks
 
-@utils.applyIJ
+def calculate_illumination_correction(files, smooth=None, rescale=True, threading=False, slicer=slice(None)):
+    """
+    Calculate illumination correction field for use with the apply_illumination_correction
+    Snake method. Equivalent to CellProfiler's CorrectIlluminationCalculate module with
+    option "Regular", "All", "Median Filter".
+
+    Note: Algorithm originally benchmarked using ~250 images per plate to calculate plate-wise
+    illumination correction functions (Singh et al. J Microscopy, 256(3):231-236, 2014).
+
+    Parameters:
+    -----------
+    files : list
+        List of file paths to images for which to calculate the illumination correction.
+    smooth : int, optional
+        Smoothing factor for the correction. Default is calculated as 1/20th of the image area.
+    rescale : bool, default True
+        Whether to rescale the correction field.
+    threading : bool, default False
+        Whether to use threading for parallel processing.
+    slicer : slice, optional
+        Slice object to select specific parts of the images.
+
+    Returns:
+    --------
+    numpy.ndarray
+        The calculated illumination correction field.
+    """
+    from ops.io import read_stack as read
+    from joblib import Parallel, delayed
+    import numpy as np
+    import skimage.morphology
+    import skimage.filters
+    import warnings
+    import ops.utils
+
+    N = len(files)
+
+    # Initialize global data variable
+    global data
+    data = read(files[0])[slicer] / N
+
+    def accumulate_image(file):
+        global data
+        data += read(file)[slicer] / N
+
+    # Accumulate images using threading or sequential processing
+    if threading:
+        Parallel(n_jobs=-1, require='sharedmem')(delayed(accumulate_image)(file) for file in files[1:])
+    else:
+        for file in files[1:]:
+            accumulate_image(file)
+
+    # Squeeze and convert data to uint16
+    data = np.squeeze(data.astype(np.uint16))
+
+    # Calculate default smoothing factor if not provided
+    if not smooth:
+        smooth = int(np.sqrt((data.shape[-1] * data.shape[-2]) / (np.pi * 20)))
+
+    selem = skimage.morphology.disk(smooth)
+    median_filter = ops.utils.applyIJ(skimage.filters.median)
+
+    # Apply median filter with warning suppression
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        smoothed = median_filter(data, selem, behavior='rank')
+
+    # Rescale channels if requested
+    if rescale:
+        @ops.utils.applyIJ
+        def rescale_channels(data):
+            # Use 2nd percentile for robust minimum
+            robust_min = np.quantile(data.reshape(-1), q=0.02)
+            robust_min = 1 if robust_min == 0 else robust_min
+            data = data / robust_min
+            data[data < 1] = 1
+            return data
+
+        smoothed = rescale_channels(smoothed)
+
+    return smoothed
+
+@ops.utils.applyIJ
+def rolling_ball_background_skimage(image, radius=100, ball=None, shrink_factor=None, smooth=None, **kwargs):
+    """
+    Apply rolling ball background subtraction to an image using skimage.
+
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        Input image for background subtraction.
+    radius : int, default 100
+        Radius of the rolling ball.
+    ball : numpy.ndarray, optional
+        Precomputed ball kernel. If None, it will be generated.
+    shrink_factor : int, optional
+        Factor by which to shrink the image and ball for faster computation. 
+        Default is determined based on the radius.
+    smooth : float, optional
+        Sigma for Gaussian smoothing applied to the background after rolling ball.
+    kwargs : dict
+        Additional arguments passed to skimage's rolling_ball function.
+
+    Returns:
+    --------
+    numpy.ndarray
+        The calculated background to be subtracted from the original image.
+    """
+    import skimage.restoration
+    import skimage.transform
+    import skimage.filters
+
+    # Generate the ball kernel if not provided
+    if ball is None:
+        ball = skimage.restoration.ball_kernel(radius, ndim=2)
+
+    # Determine shrink factor and trim based on the radius
+    if shrink_factor is None:
+        if radius <= 10:
+            shrink_factor = 1
+            trim = 0.12  # Trim 24% in x and y
+        elif radius <= 30:
+            shrink_factor = 2
+            trim = 0.12  # Trim 24% in x and y
+        elif radius <= 100:
+            shrink_factor = 4
+            trim = 0.16  # Trim 32% in x and y
+        else:
+            shrink_factor = 8
+            trim = 0.20  # Trim 40% in x and y
+
+        # Trim the ball kernel
+        n = int(ball.shape[0] * trim)
+        i0, i1 = n, ball.shape[0] - n
+        ball = ball[i0:i1, i0:i1]
+
+    # Rescale the image and ball kernel
+    image_rescaled = skimage.transform.rescale(image, 1.0 / shrink_factor, preserve_range=True).astype(image.dtype)
+    kernel_rescaled = skimage.transform.rescale(ball, 1.0 / shrink_factor, preserve_range=True).astype(ball.dtype)
+
+    # Compute the rolling ball background
+    background = skimage.restoration.rolling_ball(image_rescaled, kernel=kernel_rescaled, **kwargs)
+
+    # Apply Gaussian smoothing if specified
+    if smooth is not None:
+        background = skimage.filters.gaussian(background, sigma=smooth / shrink_factor, preserve_range=True)
+
+    # Resize the background to the original image size
+    background_resized = skimage.transform.resize(background, image.shape, preserve_range=True).astype(image.dtype)
+
+    return background_resized
+
+def subtract_background(image, radius=100, ball=None, shrink_factor=None, smooth=None, **kwargs):
+    """
+    Subtract the background from an image using the rolling ball algorithm.
+
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        Input image from which to subtract the background.
+    radius : int, default 100
+        Radius of the rolling ball.
+    ball : numpy.ndarray, optional
+        Precomputed ball kernel. If None, it will be generated.
+    shrink_factor : int, optional
+        Factor by which to shrink the image and ball for faster computation. 
+        Default is determined based on the radius.
+    smooth : float, optional
+        Sigma for Gaussian smoothing applied to the background after rolling ball.
+    kwargs : dict
+        Additional arguments passed to the rolling_ball_background_skimage function.
+
+    Returns:
+    --------
+    numpy.ndarray
+        The image with the background subtracted.
+    """
+    # Calculate the background using the rolling ball algorithm
+    background = rolling_ball_background_skimage(image, radius=radius, ball=ball,
+                                                 shrink_factor=shrink_factor, smooth=smooth, **kwargs)
+
+    # Ensure that the background does not exceed the image values
+    mask = background > image
+    background[mask] = image[mask]
+
+    # Subtract the background from the image
+    return image - background
+
+@ops.utils.applyIJ
 def log_ndi(data, sigma=1, *args, **kwargs):
     """
     Apply Laplacian of Gaussian to each image in a stack of shape (..., I, J).
@@ -274,7 +464,7 @@ class Align:
         return normed
 
     @staticmethod
-    @utils.applyIJ
+    @ops.utils.applyIJ
     def filter_percentiles(data, q1, q2):
         """Replace data outside of the percentile range [q1, q2] with uniform noise.
 
@@ -300,7 +490,7 @@ class Align:
         return Align.fill_noise(data, mask, x1, x2)
 
     @staticmethod
-    @utils.applyIJ
+    @ops.utils.applyIJ
     def filter_values(data, x1, x2):
         """Replace data outside of the value range [x1, x2] with uniform noise.
 

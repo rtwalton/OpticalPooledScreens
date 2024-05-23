@@ -10,7 +10,7 @@ from skimage.segmentation import clear_border
 
 
 def segment_cellpose(dapi, cyto, nuclei_diameter, cell_diameter, gpu=False, 
-                     net_avg=False, cyto_model='cyto', reconcile='consensus', logscale=True,
+                     cyto_model='cyto', reconcile='consensus', logscale=True,
                      remove_edges=True):
     """
     Segment nuclei and cells using the Cellpose algorithm.
@@ -21,7 +21,6 @@ def segment_cellpose(dapi, cyto, nuclei_diameter, cell_diameter, gpu=False,
         nuclei_diameter (int): Diameter of nuclei for segmentation.
         cell_diameter (int): Diameter of cells for segmentation.
         gpu (bool, optional): Whether to use GPU for segmentation. Default is False.
-        net_avg (bool, optional): Whether to use net averaging for segmentation. Default is False.
         cyto_model (str, optional): Type of cytoplasmic model to use. Default is 'cyto'.
         reconcile (str, optional): Method for reconciling nuclei and cells. Default is 'consensus'.
         logscale (bool, optional): Whether to apply log scaling to the cytoplasmic channel. Default is True.
@@ -44,8 +43,8 @@ def segment_cellpose(dapi, cyto, nuclei_diameter, cell_diameter, gpu=False,
     img = np.array([dapi, cyto])
 
     # Instantiate Cellpose models for nuclei and cytoplasmic segmentation
-    model_dapi = Cellpose(model_type='nuclei', gpu=gpu, net_avg=net_avg)
-    model_cyto = Cellpose(model_type=cyto_model, gpu=gpu, net_avg=net_avg)
+    model_dapi = Cellpose(model_type='nuclei', gpu=gpu)
+    model_cyto = Cellpose(model_type=cyto_model, gpu=gpu)
     
     # Segment nuclei and cells using Cellpose
     nuclei, _, _, _ = model_dapi.eval(img, channels=[1, 0], diameter=nuclei_diameter)
@@ -69,7 +68,7 @@ def segment_cellpose(dapi, cyto, nuclei_diameter, cell_diameter, gpu=False,
     return nuclei, cells
 
 def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False, 
-                         net_avg=False, cyto_model='cyto', reconcile='consensus', logscale=True,
+                         cyto_model='cyto', reconcile='consensus', logscale=True,
                          remove_edges=True):
     """
     Segment nuclei and cells using the Cellpose algorithm from an RGB image.
@@ -79,7 +78,6 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
         nuclei_diameter (int): Diameter of nuclei for segmentation.
         cell_diameter (int): Diameter of cells for segmentation.
         gpu (bool, optional): Whether to use GPU for segmentation. Default is False.
-        net_avg (bool, optional): Whether to use net averaging for segmentation. Default is False.
         cyto_model (str, optional): Type of cytoplasmic model to use. Default is 'cyto'.
         reconcile (str, optional): Method for reconciling nuclei and cells. Default is 'consensus'.
         logscale (bool, optional): Whether to apply log scaling to the cytoplasmic channel. Default is True.
@@ -91,8 +89,8 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
             - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
     """
     # Instantiate Cellpose models for nuclei and cytoplasmic segmentation
-    model_dapi = Cellpose(model_type='nuclei', gpu=gpu, net_avg=net_avg)
-    model_cyto = Cellpose(model_type=cyto_model, gpu=gpu, net_avg=net_avg)
+    model_dapi = Cellpose(model_type='nuclei', gpu=gpu)
+    model_cyto = Cellpose(model_type=cyto_model, gpu=gpu)
     
     # Segment nuclei and cells using Cellpose from the RGB image
     nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter)
@@ -125,7 +123,7 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
 
 
 def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False, 
-                                net_avg=False, remove_edges=True, **kwargs):
+                                remove_edges=True, **kwargs):
     """
     Segment nuclei using the Cellpose algorithm from an RGB image.
 
@@ -133,7 +131,6 @@ def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False,
         rgb (numpy.ndarray): RGB image.
         nuclei_diameter (int): Diameter of nuclei for segmentation.
         gpu (bool, optional): Whether to use GPU for segmentation. Default is False.
-        net_avg (bool, optional): Whether to use net averaging for segmentation. Default is False.
         remove_edges (bool, optional): Whether to remove nuclei touching the image edges. Default is True.
         **kwargs: Additional keyword arguments.
 
@@ -141,7 +138,7 @@ def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False,
         numpy.ndarray: Labeled segmentation mask of nuclei.
     """
     # Instantiate Cellpose model for nuclei segmentation
-    model_dapi = Cellpose(model_type='nuclei', gpu=gpu, net_avg=net_avg)
+    model_dapi = Cellpose(model_type='nuclei', gpu=gpu)
     
     # Segment nuclei using Cellpose from the RGB image
     nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter)

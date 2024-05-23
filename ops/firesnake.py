@@ -30,147 +30,214 @@ class Snake():
     """
 
     # ALIGNMENT AND SEGMENTATION
+    
+    @staticmethod
+    def _apply_illumination_correction(data, correction=None, zproject=False, rolling_ball=False, rolling_ball_kwargs={},
+                                       n_jobs=1, backend='threading'):
+        """
+        Apply illumination correction to the given data.
+
+        Parameters:
+        data (numpy array): The input data to be corrected.
+        correction (numpy array, optional): The correction factor to be applied. Default is None.
+        zproject (bool, optional): If True, perform a maximum projection along the first axis. Default is False.
+        rolling_ball (bool, optional): If True, apply a rolling ball background subtraction. Default is False.
+        rolling_ball_kwargs (dict, optional): Additional arguments for the rolling ball background subtraction. Default is an empty dictionary.
+        n_jobs (int, optional): The number of parallel jobs to run. Default is 1 (no parallelization).
+        backend (str, optional): The parallel backend to use ('threading' or 'multiprocessing'). Default is 'threading'.
+
+        Returns:
+        numpy array: The corrected data.
+        """
+
+        # If zproject is True, perform a maximum projection along the first axis
+        if zproject:
+            data = data.max(axis=0)
+
+        # If n_jobs is 1, process the data without parallelization
+        if n_jobs == 1:
+            # Apply the correction factor if provided
+            if correction is not None:
+                data = (data / correction).astype(np.uint16)
+
+            # Apply rolling ball background subtraction if specified
+            if rolling_ball:
+                data = ops.process.subtract_background(data, **rolling_ball_kwargs).astype(np.uint16)
+
+            return data
+
+        else:
+            # If n_jobs is greater than 1, apply illumination correction in parallel
+            return ops.utils.applyIJ_parallel(Snake._apply_illumination_correction,
+                                              arr=data,
+                                              correction=correction,
+                                              backend=backend,
+                                              n_jobs=n_jobs)
+
 
     @staticmethod
-    def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1,
-        align_channels=slice(1, None), keep_trailing=False):
-        """Rigid alignment of sequencing cycles and channels. 
+    def _align_SBS(data, method='DAPI', upsample_factor=2, window=2, cutoff=1, q_norm=70,
+                   align_within_cycle=True, cycle_files=None, keep_extras=False, n=1, remove_for_cycle_alignment=None):
+        """
+        Rigid alignment of sequencing cycles and channels.
 
         Parameters
         ----------
+        data : np.ndarray or list of np.ndarrays
+            Unaligned SBS image with dimensions (CYCLE, CHANNEL, I, J) or list of single cycle
+            SBS images, each with dimensions (CHANNEL, I, J)
 
-        data : numpy array
-            Image data, expected dimensions of (CYCLE, CHANNEL, I, J).
-
-        method : {'DAPI','SBS_mean'}, default 'DAPI'
-            Method for aligning 'data' across cycles. 'DAPI' uses cross-correlation between subsequent cycles
-            of DAPI images, assumes sequencing channels are aligned to DAPI images. 'SBS_mean' uses the
-            mean background signal from the SBS channels to determine image offsets between cycles of imaging,
-            again using cross-correlation.
+        method : {'DAPI','SBS_mean'}
+            Method to use for alignment.
 
         upsample_factor : int, default 2
             Subpixel alignment is done if `upsample_factor` is greater than one (can be slow).
-            Parameter passed to skimage.feature.register_translation.
 
-        window : int, default 2
-            A centered subset of data is used if `window` is greater than one. The size of the removed border is
-            int((x/2.) * (1 - 1/float(window))).
+        window : int or float, default 2
+            A centered subset of data is used if `window` is greater than one.
 
-        cutoff : float, default 1
-            Threshold for removing extreme values from SBS channels when using method='SBS_mean'. Channels are normalized
-            to the 70th percentile, and normalized values greater than `cutoff` are replaced by `cutoff`.
+        cutoff : int or float, default 1
+            Cutoff for normalized data to help deal with noise in images.
 
-        align_channels : slice object, list of indices, or None, default slice(1,None)
-            Defines channels to align to each other within cycles, and channels to use for across-cycle alignment when 
-            `method`=='SBS_mean'. If None and `method`=='DAPI', does not align channels within cycles. Else, None raises 
-            an error. Aligning within cycles is particularly useful for cases where images for all stage positions are 
-            acquired for one SBS channel at a time, i.e., acquisition order of channels(positions).
+        q_norm : int, default 70
+            Quantile for normalization to help deal with noise in images.
 
-        keep_trailing : boolean, default True
-            If True, keeps only the minimum number of trailing channels across cycles. E.g., if one cycle contains 6 channels,
-            but all others have 5, only uses trailing 5 channels for alignment.
+        align_within_cycle : bool, default True
+            Align SBS channels within cycles.
+
+        cycle_files : list of int or None, default None
+            Used for parsing sets of images where individual channels are in separate files, which
+            is more typically handled in a preprocessing step to combine images from the same cycle.
+
+        keep_extras : bool, default False
+            Retain channels that are not common across all cycles by propagating each 'extra' channel 
+            to all cycles. Ignored if same number of channels exist for all cycles.
+
+        n : int, default 1
+            Determines the first SBS channel in `data`. This is after dealing with `keep_extras`, so 
+            should only account for channels in common across all cycles if `keep_extras`=False.
+
+        remove_for_cycle_alignment : None or int, default int
+            Channel index to remove when finding cycle offsets. This is after dealing with `keep_extras`, 
+            so should only account for channels in common across all cycles if `keep_extras`=False.
 
         Returns
         -------
-
-        aligned : numpy array
-            Aligned image data, same dimensions as `data` unless `data` contained different numbers of channels between cycles
-            and keep_trailing=True.
+        aligned : np.ndarray
+            SBS image aligned across cycles.
         """
-        # Convert input data to numpy array
-        data = np.array(data)
-        
-        # If keep_trailing is True, trim the data to the minimum number of trailing channels across cycles
-        if keep_trailing:
-            valid_channels = min([len(x) for x in data])
-            data = np.array([x[-valid_channels:] for x in data])
 
-        # Ensure input data has correct dimensions
-        assert data.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
+        # Handle case where cycle_files is provided
+        if cycle_files is not None:
+            arr = []
+            current = 0
+            # Iterate through cycle files to de-nest list of numpy arrays
+            for cycle in cycle_files:
+                if cycle == 1:
+                    arr.append(data[current])
+                else:
+                    arr.append(np.array(data[current:current+cycle]))
+                current += cycle
+            data = arr
 
-        # Make a copy of the data to preserve the original
-        aligned = data.copy()
+        # Check if the number of channels varies across cycles
+        if ~all(x.shape == data[0].shape for x in data):
+            # Keep only channels in common across all cycles
+            channels = [x.shape[-3] if x.ndim > 2 else 1 for x in data]
+            stacked = np.array([x[-min(channels):] for x in data])
 
-        # Align SBS channels for each cycle if align_channels is specified
-        if align_channels is not None:
-            align_it = lambda x: Align.align_within_cycle(
-                x, window=window, upsample_factor=upsample_factor)
-            aligned[:, align_channels] = np.array(
-                [align_it(x) for x in aligned[:, align_channels]])
+            # Add back extra channels if requested
+            if keep_extras:
+                extras = np.array(channels) - min(channels)
+                arr = []
+                for cycle, extra in enumerate(extras):
+                    if extra != 0:
+                        arr.extend([data[cycle][extra_ch] for extra_ch in range(extra)])
+                propagate = np.array(arr)
+                stacked = np.concatenate((np.array([propagate] * stacked.shape[0]), stacked), axis=1)
+            else:
+                extras = [0] * stacked.shape[0]
+        else:
+            stacked = np.array(data)
+            extras = [0] * stacked.shape[0]
 
-        # Align cycles using the specified method
+        assert stacked.ndim == 4, 'Input data must have dimensions CYCLE, CHANNEL, I, J'
+
+        # Align between SBS channels for each cycle
+        aligned = stacked.copy()
+        if align_within_cycle:
+            align_it = lambda x: Align.align_within_cycle(x, window=window, upsample_factor=upsample_factor)
+            aligned[:, n:] = np.array([align_it(x) for x in aligned[:, n:]])
+
         if method == 'DAPI':
             # Align cycles using the DAPI channel
-            aligned = Align.align_between_cycles(aligned, channel_index=0, 
-                                window=window, upsample_factor=upsample_factor)
+            aligned = Align.align_between_cycles(aligned, channel_index=0,
+                                                 window=window, upsample_factor=upsample_factor)
         elif method == 'SBS_mean':
             # Calculate cycle offsets using the average of SBS channels
-            if align_channels is None:
-                raise ValueError('`align_channels` must be a slice object or list of indices '
-                    'when `method`=="SBS_mean", not None.')
-            target = Align.apply_window(aligned[:, align_channels], window=window).max(axis=1)
-            normed = Align.normalize_by_percentile(target)
+            sbs_channels = list(range(n, aligned.shape[1]))
+            if remove_for_cycle_alignment is not None:
+                sbs_channels.remove(remove_for_cycle_alignment)
+            target = Align.apply_window(aligned[:, sbs_channels], window=window).max(axis=1)
+            normed = Align.normalize_by_percentile(target, q_norm=q_norm)
             normed[normed > cutoff] = cutoff
             offsets = Align.calculate_offsets(normed, upsample_factor=upsample_factor)
             # Apply cycle offsets to each channel
             for channel in range(aligned.shape[1]):
-                aligned[:, channel] = Align.apply_offsets(aligned[:, channel], offsets)
+                if channel >= sum(extras):
+                    aligned[:, channel] = Align.apply_offsets(aligned[:, channel], offsets)
+                else:
+                    # Don't apply offsets to extra channel in the cycle it was acquired
+                    extra_idx = list(np.cumsum(extras) > channel).index(True)
+                    extra_offsets = np.array([offsets[extra_idx]] * aligned.shape[0])
+                    aligned[:, channel] = Align.apply_offsets(aligned[:, channel], extra_offsets)
+        else:
+            raise ValueError(f'method "{method}" not implemented')
 
         return aligned
 
     @staticmethod
-    def _align_by_DAPI(data_1, data_2, channel_index=0, upsample_factor=2, 
-                       autoscale=True):
-        """Align the second image to the first, using the channel at position 
-        `channel_index`. The first channel is usually DAPI.
+    def _align_by_DAPI(data_1, data_2, channel_index=0, upsample_factor=2):
+        """
+        Align the second image to the first, using the channel at position `channel_index`.
+        If `channel_index` is a tuple of length 2, specifies channels of [data_1, data_2] 
+        to use for alignment. The first channel is usually DAPI.
 
         Parameters
         ----------
-
-        data_1 : numpy array
-            Image data to align to, expected dimensions of (CHANNEL, I, J).
-
-        data_2 : numpy array
-            Image data to align, expected dimensions of (CHANNEL, I, J).
-
-        channel_index : int, default 0
-            DAPI channel index
-
+        data_1 : np.ndarray
+            The reference image data.
+        data_2 : np.ndarray
+            The image data to be aligned.
+        channel_index : int or tuple of int, default 0
+            The index of the channel to use for alignment. If a tuple, specifies channels for
+            data_1 and data_2 respectively.
         upsample_factor : int, default 2
-            Subpixel alignment is done if `upsample_factor` is greater than one (can be slow).
-            Parameter passed to skimage.feature.register_translation.
-
-        autoscale : bool, default True
-            Automatically scale `data_2` prior to alignment. Offsets are applied to 
-            the unscaled image so no resolution is lost.
+            The factor by which to upsample the images for subpixel alignment.
 
         Returns
         -------
-
-        aligned : numpy array
-            `data_2` with calculated offsets applied to all channels.
+        aligned : np.ndarray
+            The aligned version of `data_2`.
         """
-        # Collect images from both datasets based on the specified channel index.
-        images = [data_1[channel_index], data_2[channel_index]]
 
-        # If autoscale is enabled, adjust the size of the second image to match the size of the first one.
-        if autoscale:
-            images[1] = ops.utils.match_size(images[1], images[0])
+        # Check if channel_index is a tuple
+        if isinstance(channel_index, tuple):
+            assert len(channel_index) == 2, 'channel_index must either be an integer or tuple of length 2'
+            channel_index_1, channel_index_2 = channel_index
+        else:
+            channel_index_1, channel_index_2 = (channel_index,) * 2
 
-        # Calculate offsets between the two images.
+        # Extract the channels to be used for alignment
+        images = data_1[channel_index_1], data_2[channel_index_2]
+
+        # Calculate the offsets needed to align data_2 to data_1
         _, offset = ops.process.Align.calculate_offsets(images, upsample_factor=upsample_factor)
 
-        # If autoscale is enabled, adjust the offset based on the ratio of data_2's shape to data_1's shape.
-        if autoscale:
-            offset *= data_2.shape[-1] / data_1.shape[-1]
-
-        # Repeat the calculated offset for each image in data_2.
+        # Apply the calculated offsets to data_2
         offsets = [offset] * len(data_2)
-
-        # Apply the calculated offsets to align data_2 images.
         aligned = ops.process.Align.apply_offsets(data_2, offsets)
 
-        # Return the aligned images.
         return aligned
     
     @staticmethod
@@ -232,6 +299,38 @@ class Snake():
 
         return aligned
 
+    @staticmethod
+    def _stack_channels(data):
+        """
+        Stack channels from the given datasets into a single numpy array with the channel dimension as the third-to-last axis.
+
+        Parameters
+        ----------
+        data : list of np.ndarrays
+            A list of datasets, where each dataset can have different shapes.
+            If a dataset has more than two dimensions, it is assumed to have a channel dimension.
+
+        Returns
+        -------
+        np.ndarray
+            A stacked array with the channel dimension as the third-to-last axis.
+        """
+
+        arr = []
+
+        # Iterate through each dataset in the input data
+        for dataset in data:
+            # Check if the dataset has more than 2 dimensions (i.e., it has a channel dimension)
+            if len(dataset.shape) > 2:
+                # Extract each channel and append it to the arr list
+                arr.extend([dataset[..., channel, :, :] for channel in range(dataset.shape[-3])])
+            else:
+                # If the dataset doesn't have a channel dimension, append it directly to arr
+                arr.append(dataset)
+
+        # Stack all the arrays along a new axis (third-to-last axis)
+        return np.stack(arr, axis=-3)
+
         
     @staticmethod
     def _segment_nuclei(data, threshold, area_min, area_max, smooth=1.35, radius=15):
@@ -281,94 +380,131 @@ class Snake():
         return nuclei.astype(np.uint16)
 
     @staticmethod
-    def _segment_nuclei_stack(dapi, threshold, area_min, area_max, smooth=1.35, radius=15):
+    def _segment_nuclei_stack(data, threshold, area_min, area_max, smooth=1.35, radius=15, n_jobs=1, backend='threading', tqdm=False):
         """
         Find nuclei from a nuclear stain (e.g., DAPI). Expects data to have shape (I, J) 
-        (segments one image) or (N, I, J) (segments a series of DAPI images).
+        (segments one image) or (N, I, J) (segments a series of nuclear stain images).
 
-        Parameters:
-            dapi (numpy.ndarray): Input data representing a single image or a series of DAPI images.
-            threshold (float): Foreground regions with mean DAPI intensity greater than `threshold` are labeled as nuclei.
-            area_min (float): Minimum area for retaining nuclei after segmentation.
-            area_max (float): Maximum area for retaining nuclei after segmentation.
-            smooth (float, optional): Size of Gaussian kernel used to smooth the distance map to foreground prior to watershedding. Default is 1.35.
-            radius (float, optional): Radius of disk used in local mean thresholding to identify foreground. Default is 15.
+        Parameters
+        ----------
+        data : np.ndarray
+            The input image data, either a single image (I, J) or a series of images (N, I, J).
+        threshold : float
+            The threshold value for nucleus detection.
+        area_min : int
+            The minimum area for detected nuclei.
+        area_max : int
+            The maximum area for detected nuclei.
+        smooth : float, default 1.35
+            The smoothing factor for the detection process.
+        radius : int, default 15
+            The radius for the rolling ball algorithm used in background subtraction.
+        n_jobs : int, default 1
+            The number of parallel jobs to run. If 1, no parallelization is used.
+        backend : str, default 'threading'
+            The parallel backend to use ('threading' or 'multiprocessing').
+        tqdm : bool, default False
+            Whether to use tqdm to show a progress bar during processing.
 
-        Returns:
-            nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
+        Returns
+        -------
+        np.ndarray
+            The segmented nuclei, with the same dimensions as the input data but with nuclei labeled by unique integers.
         """
-        # Define keyword arguments for find_nuclei function
-        kwargs = dict(threshold=lambda x: threshold, 
-                      area_min=area_min, area_max=area_max,
-                      smooth=smooth, radius=radius)
 
-        # Apply the find_nuclei function using applyIJ decorator
-        find_nuclei = ops.utils.applyIJ(ops.process.find_nuclei)
-        
-        # Suppress precision warning from skimage
+        # Define keyword arguments for the find_nuclei function
+        kwargs = dict(
+            threshold=lambda x: threshold, 
+            area_min=area_min, 
+            area_max=area_max,
+            smooth=smooth, 
+            radius=radius
+        )
+
+        # Determine whether to use parallel processing
+        if n_jobs == 1:
+            # No parallel processing, use applyIJ function
+            find_nuclei = ops.utils.applyIJ(ops.process.find_nuclei)
+        else:
+            # Use parallel processing, set additional kwargs for parallelization
+            kwargs['n_jobs'] = n_jobs
+            kwargs['tqdm'] = tqdm
+            find_nuclei = functools.partial(ops.utils.applyIJ_parallel, ops.process.find_nuclei, backend=backend)
+
+        # Suppress skimage precision warning
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # Use the find_nuclei function to segment nuclei
-            nuclei = find_nuclei(dapi, **kwargs)
-        
-        # Convert nuclei array to uint16 dtype and return
+            # Find nuclei in the data using the specified method
+            nuclei = find_nuclei(data, **kwargs)
+
+        # Return the nuclei data as unsigned 16-bit integers
         return nuclei.astype(np.uint16)
 
 
     @staticmethod
-    def _segment_cells(data, nuclei, threshold):
+    def _segment_cells(data, nuclei, threshold, add_nuclei=True):
         """
-        Segment cells from aligned data. Matches cell labels to nuclei labels.
-        Note that labels can be skipped, for example if cells are touching the image boundary.
+        Segment cells from aligned data and match cell labels to nuclei labels.
+        Note that labels can be skipped, for example if cells are touching the 
+        image boundary.
 
-        Parameters:
-            data (numpy.ndarray): Image data to use for cell boundary segmentation.
-                Expected dimensions of (CYCLE, CHANNEL, I, J), (CHANNEL, I, J), or (I,J).
-                Takes minimum intensity over cycles, followed by mean intensity over channels if both are present.
-                If channels are present but not cycles, takes median over channels.
-            nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
-                Dimensions are same as trailing two dimensions of `data`.
-                Uses nuclei as seeds for watershedding and matches cell labels to nuclei labels.
-            threshold (float): Threshold used on `data` after reduction to 2 dimensions to identify cell boundaries.
+        Parameters
+        ----------
+        data : np.ndarray
+            The aligned image data. Can have 2, 3, or 4 dimensions.
+        nuclei : np.ndarray
+            The segmented nuclei data.
+        threshold : float
+            The threshold value for cell segmentation.
+        add_nuclei : bool, default True
+            Whether to add the nuclei shape to the cell mask to help with mapping 
+            reads to cells at the edge of the field of view.
 
-        Returns:
-            cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
-                Dimensions are same as trailing dimensions of `data`.
-                Labels match `nuclei` labels.
+        Returns
+        -------
+        np.ndarray
+            The segmented cells, with labels matched to nuclei.
         """
-        # Reduce data to 2 dimensions based on its shape
+
+        # Determine the mask based on the number of dimensions in data
         if data.ndim == 4:
-            # No DAPI, take minimum over cycles, followed by mean over channels
+            # If data has 4 dimensions: no DAPI, min over cycles, mean over channels
             mask = data[:, 1:].min(axis=0).mean(axis=0)
         elif data.ndim == 3:
-            # No cycles, take median over channels
+            # If data has 3 dimensions: median over the remaining channels
             mask = np.median(data[1:], axis=0)
         elif data.ndim == 2:
-            # Only one channel or cycle present
+            # If data has 2 dimensions: use the data directly as the mask
             mask = data
         else:
-            # Invalid data shape
-            raise ValueError
+            # Raise an error if data has an unsupported number of dimensions
+            raise ValueError("Data must have 2, 3, or 4 dimensions")
 
-        # Threshold the reduced data to identify cell boundaries
+        # Apply the threshold to the mask to create a binary mask
         mask = mask > threshold
-        
+
+        # Add the nuclei to the mask if add_nuclei is True
+        if add_nuclei:
+            mask += nuclei.astype(bool)
+
         try:
-            # Apply find_cells function to segment cells using nuclei as seeds
+            # Suppress skimage precision warning
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                # Find cells in the mask
                 cells = ops.process.find_cells(nuclei, mask)
         except ValueError:
-            # Handle error when no cells are found
+            # Handle the case where no cells are found
             print('segment_cells error -- no cells')
             cells = nuclei
-        
+
         # Calculate the number of segmented cells (excluding background label)
         num_cells_segmented = len(np.unique(cells)) - 1
         print(f"Number of cells segmented: {num_cells_segmented}")
 
+        # Return the segmented cells
         return cells
-
+    
     @staticmethod
     def _segment_cell_2019(data, nuclei_threshold, nuclei_area_min,
                            nuclei_area_max, cell_threshold):
@@ -396,31 +532,50 @@ class Snake():
         return nuclei, cells
 
     @staticmethod
-    def _segment_cellpose(data, dapi_index, cyto_index, diameter):
+    def _segment_cells_dilation(nuclei, radius=10, ring=True):
         """
-        Segment nuclei and cells using the Cellpose algorithm.
+        Segment cells by dilating the nuclei.
 
-        Parameters:
-            data (list or numpy.ndarray): List or array containing DAPI and cytoplasmic channel images.
-            dapi_index (int): Index of DAPI channel in the data.
-            cyto_index (int): Index of cytoplasmic channel in the data.
-            diameter (int): Diameter of nuclei and cells for segmentation.
+        Parameters
+        ----------
+        nuclei : np.ndarray
+            The segmented nuclei data.
+        radius : int, default 10
+            The radius for the disk used in binary dilation.
+        ring : bool, default True
+            Whether to subtract the nuclei from the cells to create a ring around the nuclei.
 
-        Returns:
-            tuple: A tuple containing:
-                - nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
-                - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
+        Returns
+        -------
+        np.ndarray
+            The segmented cells, with optional ring around the nuclei.
         """
-        # Import necessary functions from ops.cellpose module
-        from ops.cellpose import segment_cellpose_rgb
+
+        # Perform binary dilation on the nuclei using a disk of the given radius
+        mask = skimage.morphology.binary_dilation(nuclei > 0, skimage.morphology.disk(radius))
+
+        try:
+            # Suppress skimage precision warning
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                # Find cells in the mask
+                cells = ops.process.find_cells(nuclei, mask)
+        except ValueError:
+            # Handle the case where no cells are found
+            print('segment_cells error -- no cells')
+            cells = nuclei
+
+        if ring:
+            # Subtract nuclei from cells to create a ring around the nuclei
+            # WARNING: This can cause issues and integer wraparound for cells on the edge which are removed in find_cells()
+            cells -= nuclei
+
+        # Calculate the number of segmented cells (excluding background label)
+        num_cells_segmented = len(np.unique(cells)) - 1
+        print(f"Number of cells segmented: {num_cells_segmented}")           
         
-        # Prepare RGB image for Cellpose segmentation
-        rgb = Snake._prepare_cellpose(data, dapi_index, cyto_index)
-        
-        # Segment nuclei and cells using Cellpose algorithm
-        nuclei, cells = segment_cellpose_rgb(rgb, diameter)
-        
-        return nuclei, cells
+        # Return the segmented cells
+        return cells
     
     @staticmethod
     def _segment_cells_robust(data, channel, nuclei, background_offset, background_quantile=0.05, 
@@ -488,50 +643,58 @@ class Snake():
         print(f"Number of cells segmented: {num_cells_segmented}")
         
         return cells
-
+    
     @staticmethod
-    def _apply_illumination_correction(data, correction=None, zproject=False, rolling_ball=False, rolling_ball_kwargs={},
-                                       n_jobs=1, backend='threading'):
+    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, logscale=True,
+                          cellpose_kwargs=dict(), cells=True):
         """
-        Apply illumination correction to image data.
+        Segment cells using Cellpose algorithm.
 
         Args:
-            data (numpy.ndarray): Image data.
-            correction (numpy.ndarray or None): Illumination correction data.
-            zproject (bool): Whether to perform z-projection before applying correction.
-            rolling_ball (bool): Whether to perform rolling ball background subtraction.
-            rolling_ball_kwargs (dict): Keyword arguments for rolling ball background subtraction.
-            n_jobs (int): Number of parallel jobs.
-            backend (str): Parallel backend to use.
+            data (numpy.ndarray): Multichannel image data.
+            dapi_index (int): Index of DAPI channel.
+            cyto_index (int): Index of cytoplasmic channel.
+            nuclei_diameter (int): Estimated diameter of nuclei.
+            cell_diameter (int): Estimated diameter of cells.
+            logscale (bool, optional): Whether to apply logarithmic transformation to image data.
+            cellpose_kwargs (dict, optional): Additional keyword arguments for Cellpose.
+            cells (bool, optional): Whether to segment both nuclei and cells or just nuclei.
 
         Returns:
-            numpy.ndarray: Corrected image data.
+            tuple or numpy.ndarray: If 'cells' is True, returns tuple of nuclei and cell segmentation masks,
+            otherwise returns only nuclei segmentation mask.
         """
-        if zproject:
-            data = data.max(axis=0)
 
-        if n_jobs == 1:
-            # Apply correction if provided
-            if correction is not None:
-                data = (data / correction).astype(np.uint16)
+        # Prepare data for Cellpose by creating a merged RGB image
+        log_kwargs = cellpose_kwargs.pop('log_kwargs', dict())  # Extract log_kwargs from cellpose_kwargs
+        rgb = Snake._prepare_cellpose(data, dapi_index, cyto_index, logscale, log_kwargs=log_kwargs)
 
-            # Perform rolling ball background subtraction if enabled
-            if rolling_ball:
-                data = ops.process.subtract_background(data, **rolling_ball_kwargs).astype(np.uint16)
+        # Perform cell segmentation using Cellpose
+        if cells:
+            # Segment both nuclei and cells
+            from ops.cellpose import segment_cellpose_rgb
+            nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, **cellpose_kwargs)
+            # Calculate the number of segmented nuclei
+            num_nuclei_segmented = len(np.unique(nuclei))
+            print(f"Number of cells segmented: {num_nuclei_segmented}")
+            # Calculate the number of segmented cells
+            num_cells_segmented = len(np.unique(cells))
+            print(f"Number of cells segmented: {num_cells_segmented}")
 
-            return data
-
+            return nuclei, cells
         else:
-            # Apply correction and background subtraction in parallel
-            return ops.utils.applyIJ_parallel(Snake._apply_illumination_correction,
-                                              arr=data,
-                                              correction=correction,
-                                              backend=backend,
-                                              n_jobs=n_jobs)
+            # Segment only nuclei
+            from ops.cellpose import segment_cellpose_nuclei_rgb
+            nuclei = segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, **cellpose_kwargs)
+            # Calculate the number of segmented nuclei
+            num_nuclei_segmented = len(np.unique(nuclei))
+            print(f"Number of cells segmented: {num_nuclei_segmented}")
+
+            return nuclei
 
     
     @staticmethod
-    def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True):
+    def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True, log_kwargs=dict()):
         """
         Prepare a three-channel RGB image for use with the Cellpose GUI.
 
@@ -559,7 +722,7 @@ class Snake():
 
         # Apply log scaling to the cytoplasmic channel if specified
         if logscale:
-            cyto = image_log_scale(cyto)
+            cyto = image_log_scale(cyto,**log_kwargs)
             cyto /= cyto.max()  # Normalize the image for uint8 conversion
 
         # Normalize the intensity of the DAPI channel and scale it to the range [0, 1]
@@ -735,52 +898,63 @@ class Snake():
 
 
     @staticmethod
-    def _call_reads(df_bases, correction_quartile=0, peaks=None, correction_only_in_cells=True, correction_by_cycle=False, subtract_channel_min=False):
-        """Perform median correction independently for each tile.
+    def _call_reads(df_bases, peaks=None, correction_only_in_cells=True, normalize_bases=True):
+        """
+        Call reads by compensating for channel cross-talk and calling the base
+        with the highest corrected intensity for each cycle. Median correction
+        is performed independently for each tile.
 
-        Args:
-            df_bases (DataFrame): DataFrame containing base information.
-            correction_quartile (int, optional): Quartile used for median correction. Default is 0.
-            peaks (numpy.ndarray, optional): Array containing peak information. Default is None.
-            correction_only_in_cells (bool, optional): Flag indicating if correction is based only on reads within cells. Default is True.
-            correction_by_cycle (bool, optional): Flag indicating if correction is performed by cycle. Default is False.
-            subtract_channel_min (bool, optional): Flag indicating if channel minimum should be subtracted from intensity. Default is False.
+        Parameters:
+        -----------
+        df_bases : pandas DataFrame
+            Table of base intensity for all candidate reads, output of Snake.extract_bases().
+
+        peaks : None or numpy array, default None
+            Peaks/local maxima score for each pixel (output of Snake.find_peaks()) to be included
+            in the df_reads table for downstream QC or other analysis. If None, does not include
+            peaks scores in returned df_reads table.
+
+        correction_only_in_cells : boolean, default True
+            If True, restricts median correction/compensation step to account only for reads that
+            are within a cell, as defined by the cell segmentation mask passed into
+            Snake.extract_bases(). Often identified spots outside of cells are not true sequencing
+            reads.
+
+        normalize_bases : boolean, default True
+            If True, normalizes the base intensities before performing median correction.
 
         Returns:
-            DataFrame: DataFrame containing corrected reads.
+        --------
+        df_reads : pandas DataFrame
+            Table of all reads with base calls resulting from SBS compensation and related metadata.
         """
-        # Create a copy of the DataFrame to avoid modifying the original data
-        df_bases = df_bases.copy()
 
-        # Check if DataFrame is None and return if so
         if df_bases is None:
             return
-
-        # Check if correction should be applied only to reads within cells
         if correction_only_in_cells:
-            # If no reads within cells, return
             if len(df_bases.query('cell > 0')) == 0:
                 return
 
-        # Subtract channel minimum from intensity if specified
-        if subtract_channel_min:
-            df_bases['intensity'] = df_bases['intensity'] - df_bases.groupby([WELL,TILE,CELL,READ,CHANNEL])['intensity'].transform('min')
-
-        # Determine the number of cycles and channels
         cycles = len(set(df_bases['cycle']))
         channels = len(set(df_bases['channel']))
 
-        # Perform median call on the bases DataFrame
-        df_reads = (
-            df_bases
-            .pipe(ops.in_situ.clean_up_bases)
-            .pipe(ops.in_situ.do_median_call, cycles, channels=channels,
-                correction_only_in_cells=correction_only_in_cells, 
-                correction_by_cycle=correction_by_cycle, 
-                correction_quartile=correction_quartile)
-        )
+        if normalize_bases:
+            # Clean up and normalize base intensities, then perform median calling
+            df_reads = (df_bases
+                        .pipe(ops.in_situ.clean_up_bases)
+                        .pipe(ops.in_situ.normalize_bases)
+                        .pipe(ops.in_situ.do_median_call, cycles, channels=channels,
+                              correction_only_in_cells=correction_only_in_cells)
+                        )
+        else:
+            # Clean up bases and perform median calling without normalization
+            df_reads = (df_bases
+                        .pipe(ops.in_situ.clean_up_bases)
+                        .pipe(ops.in_situ.do_median_call, cycles, channels=channels,
+                              correction_only_in_cells=correction_only_in_cells)
+                        )
 
-        # Add peak information if provided
+        # Include peaks scores if available
         if peaks is not None:
             i, j = df_reads[['i', 'j']].values.T
             df_reads['peak'] = peaks[i, j]
@@ -1027,6 +1201,30 @@ class Snake():
 
         return df
 
+    @staticmethod
+    def _extract_timelapse_features(data, labels, wildcards, features=None):
+        """
+        Extract features from timelapse data and combine with generic region features.
+
+        Args:
+            data (numpy.ndarray): Timelapse image data.
+            labels (numpy.ndarray): Segmentation masks.
+            wildcards (list): List of wildcards.
+            features (list, optional): List of features to extract.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing extracted features.
+        """
+
+        arr = []
+        # Iterate over frames in the timelapse
+        for i, (frame, labels_frame) in enumerate(zip(np.squeeze(data), np.squeeze(labels))):
+            # Extract features for each frame and concatenate to the array
+            arr += [(Snake._extract_features(frame, labels_frame, wildcards, features=features)
+                     .assign(frame=i))]
+
+        # Concatenate all extracted features and rename 'label' column to 'cell'
+        return pd.concat(arr).rename(columns={'label': 'cell'})
 
     
     @staticmethod
@@ -1129,7 +1327,65 @@ class Snake():
 
         return df_phenotype
 
+    @staticmethod
+    def _extract_phenotype_nuclei_cells(data_phenotype, nuclei, cells, features_n, features_c, wildcards, columns=None,
+                                         multichannel=False):
+        """
+        Extract phenotype features from nuclei and cell segmentation masks.
 
+        Args:
+            data_phenotype (pandas.DataFrame): Phenotype data.
+            nuclei (numpy.ndarray): Nuclei segmentation masks.
+            cells (numpy.ndarray): Cell segmentation masks.
+            features_n (dict): Dictionary of nuclei features to extract.
+            features_c (dict): Dictionary of cell features to extract.
+            wildcards (dict): Dictionary of wildcards.
+            columns (dict, optional): Custom column mapping for features.
+            multichannel (bool, optional): Whether the data is multichannel.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing extracted phenotype features.
+        """
+
+        # Check if there are no nuclei or cells
+        if (nuclei.max() == 0) or (cells.max() == 0):
+            return
+
+        import ops.features
+
+        # Use default column mapping if not provided
+        if columns is None:
+            columns = {c: c for c in set(features_n.keys()) | set(features_c.keys())}
+
+        # Extract nuclei features
+        df_n = (
+            Snake._extract_features(data_phenotype, nuclei, wildcards=wildcards, features=features_n,
+                                    multichannel=multichannel)
+            .rename(columns=columns)
+            .set_index(['label'] + list(wildcards.keys()))
+            .add_prefix('nucleus_')
+            .reset_index(level=list(range(1, len(wildcards) + 1)))
+        )
+
+        # Extract cell features
+        df_c = (
+            Snake._extract_features(data_phenotype, cells, features=features_c, wildcards=wildcards,
+                                    multichannel=multichannel)
+            .drop(columns=wildcards.keys())
+            .rename(columns=columns)
+            .set_index('label')
+            .add_prefix('cell_')
+        )
+
+        # Concatenate nuclei and cell features, joining on 'label'
+        # Inner join discards nuclei without corresponding cells
+        df = (pd.concat([df_n, df_c], axis=1, join='inner')
+              .reset_index())
+
+        return (df
+                .rename(columns={'label': 'cell'}))
+
+    
     @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
         """
@@ -1339,6 +1595,30 @@ class Snake():
 
         # Extract geometric features
         return Snake._extract_features(labels, labels, wildcards, features_geom)
+    
+    @staticmethod
+    def _extract_simple_nuclear_morphology(data_phenotype, nuclei, wildcards):
+        """
+        Extract simple nuclear morphology features.
+
+        Args:
+            data_phenotype (pandas.DataFrame): Phenotype data.
+            nuclei (numpy.ndarray): Nuclei segmentation masks.
+            wildcards (list): List of wildcards.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing extracted nuclear morphology features.
+        """
+
+        import ops.morphology_features
+
+        # Extract nuclear morphology features using specified features
+        df = (Snake._extract_features(data_phenotype, nuclei, wildcards, ops.morphology_features.features_nuclear)
+              .rename(columns={'label': 'cell'})
+              )
+
+        return df
+
 
     @staticmethod
     def _extract_phenotype_cp_old(data_phenotype, nuclei, cells, wildcards, nucleus_channels='all', cell_channels='all', channel_names=['dapi','tubulin','gh2ax','phalloidin']):
@@ -1716,6 +1996,29 @@ class Snake():
         # Extract bases using maximum filtered data
         return Snake._extract_bases(maxed, peaks, cells, bases=['-'], threshold_peaks=threshold_peaks, wildcards=wildcards)
 
+    @staticmethod
+    def _align_stage_drift(data, frames=10):
+        """
+        Correct minor stage drift across first frames of timelapse.
+
+        Args:
+            data (numpy.ndarray): Timelapse image data.
+            frames (int, optional): Number of frames to use for drift correction.
+
+        Returns:
+            list: List of offsets for each frame.
+        """
+
+        offsets = []
+        data = np.squeeze(data)  # Remove singleton dimensions
+        for source, target in zip(data[:(frames - 1)], data[1:frames]):
+            # Apply windowed alignment between consecutive frames
+            windowed = Align.apply_window(np.array([target, source]), window=2)
+            # Calculate and store the offset between frames
+            offsets.append(windowed[1].translation - windowed[0].translation)
+
+        return offsets
+
 
     @staticmethod
     def _track_live_nuclei(nuclei, tolerance_per_frame=5):
@@ -1758,6 +2061,70 @@ class Snake():
         nuclei_tracked = ops.timelapse.relabel_nuclei(nuclei, relabel)
 
         return nuclei_tracked
+
+    @staticmethod
+    def _relabel_trackmate(nuclei, df_trackmate, df_nuclei_coords):
+        """
+        Relabel nuclei segmentation masks based on TrackMate tracking data.
+
+        Args:
+            nuclei (numpy.ndarray): Nuclei segmentation masks.
+            df_trackmate (pandas.DataFrame): DataFrame containing TrackMate tracking data.
+            df_nuclei_coords (pandas.DataFrame): DataFrame containing nuclei coordinates.
+
+        Returns:
+            tuple: DataFrame containing relabeled nuclei data and relabeled nuclei segmentation masks.
+        """
+
+        import ops.timelapse
+
+        # Merge nuclei coordinates with TrackMate tracking data
+        df = (df_nuclei_coords
+              .merge(df_trackmate[['id', 'track_id', 'cell', 'frame', 'parent_ids']], how='left', on=['frame', 'cell'])
+              .fillna({'track_id': -1,
+                       'parent_ids': '[]',
+                       })
+              )
+
+        # Assign unique IDs to untracked nuclei
+        missing = sorted(set(range(len(df))) - set(df['id']))
+        df.loc[df['id'].isna(), 'id'] = missing
+
+        # Format TrackMate data for relabeling
+        df_relabel = ops.timelapse.format_trackmate(df[['id', 'cell', 'frame', 'parent_ids']])
+
+        # Merge relabeling data with nuclei DataFrame
+        df_relabel = (df
+                      .merge(df_relabel[['id', 'relabel', 'parent_cell_0', 'parent_cell_1']], how='left', on='id')
+                      .drop(columns=['id', 'parent_ids'])
+                      )
+
+        def relabel_frame(nuclei_frame, df_relabel_frame):
+            """
+            Relabel nuclei segmentation mask for a single frame.
+
+            Args:
+                nuclei_frame (numpy.ndarray): Nuclei segmentation mask for a single frame.
+                df_relabel_frame (pandas.DataFrame): DataFrame containing relabeling data for the frame.
+
+            Returns:
+                numpy.ndarray: Relabeled nuclei segmentation mask for the frame.
+            """
+            nuclei_frame_ = nuclei_frame.copy()
+            max_label = nuclei_frame.max() + 1
+            labels = df_relabel_frame['cell'].tolist()
+            relabels = df_relabel_frame['relabel'].tolist()
+            table = np.zeros(nuclei_frame.max() + 1)
+            table[labels] = relabels
+            nuclei_frame_ = table[nuclei_frame_]
+            return nuclei_frame_
+
+        # Relabel nuclei segmentation masks for each frame
+        relabeled = np.array([relabel_frame(nuclei_frame, df_relabel_frame)
+                              for nuclei_frame, (_, df_relabel_frame) in zip(nuclei, df_relabel.groupby('frame'))])
+
+        # Return relabeled nuclei data and segmentation masks
+        return (df_relabel.drop(columns=['cell']).rename(columns={'relabel': 'cell'}), relabeled.astype(np.uint16))
 
 
     # HASH
