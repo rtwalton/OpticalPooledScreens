@@ -1,3 +1,17 @@
+"""
+Sequencing Data Processing and Base Calling Utilities
+
+This module provides a set of functions for mapping and analyzing sequencing reads
+(step 2 -- sbs base calling). It includes functions for:
+
+1. Base Intensity Extraction: Functions to extract base intensities from sequencing data.
+2. Base Calling: Algorithms for calling bases from raw intensity data.
+3. Read Formatting: Tools to format and normalize sequencing reads.
+4. Quality Score Calculation: Functions to compute quality scores for sequencing reads.
+5. Barcode Assignment: Utilities for assigning barcodes to cells based on sequencing data.
+
+"""
+
 import numpy as np
 import pandas as pd
 from ops.constants import *
@@ -285,35 +299,6 @@ def transform_medians(X, correction_quartile=0):
     # Apply transformation to X
     Y = W.dot(X.T).T.astype(int)
     return Y, W
-
-def transform_medians(X,correction_quartile=0):
-    """For each dimension, find points where that dimension is max. Use median of those points to define new axes. 
-    Describe with linear transformation W so that W * X = Y.
-    """
-    def get_medians(X,correction_quartile):
-        arr = []
-        for i in range(X.shape[1]):
-            max_spots = X[X.argmax(axis=1) == i]
-            try:
-                arr += [np.median(max_spots[max_spots[:,i] >= np.quantile(max_spots,axis=0,q=correction_quartile)[i]],axis=0)]
-            except:
-                arr += [np.median(max_spots,axis=0)]
-        M = np.array(arr)
-        return M
-
-    # def get_medians(X):
-    #     arr = []
-    #     for i in range(X.shape[1]):
-    #         arr += [np.median(X[X.argmax(axis=1) == i], axis=0)]
-    #     M = np.array(arr)
-    #     return M
-
-    M = get_medians(X,correction_quartile).T
-    M = M / M.sum(axis=0)
-    W = np.linalg.inv(M)
-    Y = W.dot(X.T).T.astype(int)
-    return Y, W
-
 
 def normalize_bases(df):
     """

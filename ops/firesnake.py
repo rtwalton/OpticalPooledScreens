@@ -1,3 +1,13 @@
+"""
+Firesnake: Core Analysis Pipeline Module
+
+This module serves as the central hub for the spatial transcriptomics analysis pipeline. It contains the Snake class, 
+which encapsulates a wide range of methods for image processing, sequencing data analysis, and phenotype extraction. 
+The module is designed to work with Snakemake, a workflow management system, to orchestrate complex computational workflows.
+
+"""
+
+
 import inspect
 import functools
 import os
@@ -139,6 +149,8 @@ class Snake():
                     arr.append(np.array(data[current:current+cycle]))
                 current += cycle
             data = arr
+            print(data[0].shape)
+            print(data[1].shape)
 
         # Check if the number of channels varies across cycles
         if ~all(x.shape == data[0].shape for x in data):
@@ -372,7 +384,7 @@ class Snake():
             # Use find_nuclei function to segment nuclei from DAPI channel
             nuclei = ops.process.find_nuclei(dapi, **kwargs)
 
-        # Calculate the number of segmented cells (excluding background label)
+        # Calculate the number of segmented nuclei (excluding background label)
         num_nuclei_segmented = len(np.unique(nuclei)) - 1
         print(f"Number of nuclei segmented: {num_nuclei_segmented}")
 
@@ -506,32 +518,6 @@ class Snake():
         return cells
     
     @staticmethod
-    def _segment_cell_2019(data, nuclei_threshold, nuclei_area_min,
-                           nuclei_area_max, cell_threshold):
-        """
-        Combine morphological segmentation of nuclei and cells to have the same interface as _segment_cellpose.
-
-        Parameters:
-            data (numpy.ndarray): Image data for segmentation.
-            nuclei_threshold (float): Threshold for nuclei segmentation.
-            nuclei_area_min (float): Minimum area for retaining nuclei after segmentation.
-            nuclei_area_max (float): Maximum area for retaining nuclei after segmentation.
-            cell_threshold (float): Threshold used for cell boundary segmentation.
-
-        Returns:
-            tuple: A tuple containing:
-                - nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
-                - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
-        """
-        # Segment nuclei using the _segment_nuclei method
-        nuclei = Snake._segment_nuclei(data[0], nuclei_threshold, nuclei_area_min, nuclei_area_max)
-        
-        # Segment cells using the _segment_cells method
-        cells = Snake._segment_cells(data, nuclei, cell_threshold)
-        
-        return nuclei, cells
-
-    @staticmethod
     def _segment_cells_dilation(nuclei, radius=10, ring=True):
         """
         Segment cells by dilating the nuclei.
@@ -643,13 +629,91 @@ class Snake():
         print(f"Number of cells segmented: {num_cells_segmented}")
         
         return cells
+
+    @staticmethod
+    def _segment_cell_2019(data, nuclei_threshold, nuclei_area_min,
+                           nuclei_area_max, cell_threshold):
+        """
+        Combine morphological segmentation of nuclei and cells to have the same interface as _segment_cellpose.
+
+        Parameters:
+            data (numpy.ndarray): Image data for segmentation.
+            nuclei_threshold (float): Threshold for nuclei segmentation.
+            nuclei_area_min (float): Minimum area for retaining nuclei after segmentation.
+            nuclei_area_max (float): Maximum area for retaining nuclei after segmentation.
+            cell_threshold (float): Threshold used for cell boundary segmentation.
+
+        Returns:
+            tuple: A tuple containing:
+                - nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
+                - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
+        """
+        # If SBS data, image will have 4 dimensions
+        if data.ndim == 4:
+            # Select first cycle
+            nuclei_data = data[0]
+
+        # Segment nuclei using the _segment_nuclei method
+        nuclei = Snake._segment_nuclei(nuclei_data, nuclei_threshold, nuclei_area_min, nuclei_area_max)
+        
+        # Segment cells using the _segment_cells method
+        cells = Snake._segment_cells(data, nuclei, cell_threshold)
+        
+        return nuclei, cells
     
     @staticmethod
-    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter, logscale=True,
-                          cellpose_kwargs=dict(), cells=True):
+    def _segment_cell_2022(data, nuclei_threshold, nuclei_area_min,
+                           nuclei_area_max, channel, background_offset, 
+                           cell_count_thresholds, background_quantile,
+                           smooth=None, erosion=None, 
+                           add_nuclei=True, mask_dilation=5):
+        """
+        Combine morphological segmentation of nuclei and cells to have the same interface as _segment_cellpose using segment_cell_robust.
+
+        This method segments nuclei and cells from image data using specified thresholds and parameters. It first segments nuclei and then 
+        segments cells based on the segmented nuclei.
+
+        Parameters:
+            data (numpy.ndarray): Image data for segmentation.
+            nuclei_threshold (float): Threshold for nuclei segmentation.
+            nuclei_area_min (float): Minimum area for retaining nuclei after segmentation.
+            nuclei_area_max (float): Maximum area for retaining nuclei after segmentation.
+            channel (int): Channel index used for background signal in cell segmentation.
+            background_offset (float): Offset for background threshold in cell segmentation.
+            cell_count_thresholds (tuple): Threshold values for cell count classification.
+            background_quantile (dict): Dictionary containing quantile values for different cell count thresholds.
+            smooth (float, optional): Smoothing factor for preprocessing. Defaults to None.
+            erosion (float, optional): Erosion factor for preprocessing. Defaults to None.
+            add_nuclei (bool, optional): Whether to add nuclei to the cell segmentation. Defaults to True.
+            mask_dilation (int, optional): Dilation factor for masks. Defaults to 5.
+
+        Returns:
+            tuple: A tuple containing:
+                - nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
+                - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
+        """
+        # Segment nuclei using the _segment_nuclei method
+        nuclei = Snake._segment_nuclei(data[0], nuclei_threshold, nuclei_area_min, nuclei_area_max)
+
+        # Determine quantile based on the maximum value in the segmented nuclei images
+        if nuclei.max() < cell_count_thresholds[0]:
+            quantile = background_quantile['low']
+        elif nuclei.max() > cell_count_thresholds[1]:
+            quantile = background_quantile['high']
+        else:
+            quantile = background_quantile['mid']
+
+        # Segment cells using the _segment_cells_robust method
+        cells = Snake._segment_cells_robust(data, channel, nuclei, background_offset, quantile, smooth, erosion, add_nuclei, mask_dilation)
+
+        return nuclei, cells
+
+    @staticmethod
+    def _segment_cellpose(data, dapi_index, cyto_index, nuclei_diameter, cell_diameter,
+                          cellpose_kwargs=dict(), cells=True, cyto_model='cyto', reconcile='consensus', 
+                          logscale=True, return_counts=False):
         """
         Segment cells using Cellpose algorithm.
-
         Args:
             data (numpy.ndarray): Multichannel image data.
             dapi_index (int): Index of DAPI channel.
@@ -659,38 +723,54 @@ class Snake():
             logscale (bool, optional): Whether to apply logarithmic transformation to image data.
             cellpose_kwargs (dict, optional): Additional keyword arguments for Cellpose.
             cells (bool, optional): Whether to segment both nuclei and cells or just nuclei.
-
+            reconcile (str, optional): Method for reconciling nuclei and cells. Default is 'consensus'.
+            return_counts (bool, optional): Whether to return counts of nuclei and cells. Default is False.
         Returns:
             tuple or numpy.ndarray: If 'cells' is True, returns tuple of nuclei and cell segmentation masks,
-            otherwise returns only nuclei segmentation mask.
+            otherwise returns only nuclei segmentation mask. If return_counts is True, includes a dictionary of counts.
         """
-
         # Prepare data for Cellpose by creating a merged RGB image
         log_kwargs = cellpose_kwargs.pop('log_kwargs', dict())  # Extract log_kwargs from cellpose_kwargs
         rgb = Snake._prepare_cellpose(data, dapi_index, cyto_index, logscale, log_kwargs=log_kwargs)
+
+        counts = {}
 
         # Perform cell segmentation using Cellpose
         if cells:
             # Segment both nuclei and cells
             from ops.cellpose import segment_cellpose_rgb
-            nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, **cellpose_kwargs)
-            # Calculate the number of segmented nuclei
-            num_nuclei_segmented = len(np.unique(nuclei))
-            print(f"Number of cells segmented: {num_nuclei_segmented}")
-            # Calculate the number of segmented cells
-            num_cells_segmented = len(np.unique(cells))
-            print(f"Number of cells segmented: {num_cells_segmented}")
+            if return_counts:
+                nuclei, cells, seg_counts = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, 
+                                                                 reconcile=reconcile, return_counts=True, 
+                                                                 **cellpose_kwargs)
+                counts.update(seg_counts)
 
-            return nuclei, cells
+            else:
+                nuclei, cells = segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, 
+                                                     reconcile=reconcile, **cellpose_kwargs)
+
+            counts['final_nuclei'] = len(np.unique(nuclei)) - 1
+            counts['final_cells'] = len(np.unique(cells)) - 1
+            counts_df = pd.DataFrame([counts])
+            print(f"Number of nuclei segmented: {counts['final_nuclei']}")
+            print(f"Number of cells segmented: {counts['final_cells']}")
+
+            if return_counts:
+                return nuclei, cells, counts_df
+            else:
+                return nuclei, cells
         else:
             # Segment only nuclei
             from ops.cellpose import segment_cellpose_nuclei_rgb
             nuclei = segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, **cellpose_kwargs)
-            # Calculate the number of segmented nuclei
-            num_nuclei_segmented = len(np.unique(nuclei))
-            print(f"Number of cells segmented: {num_nuclei_segmented}")
+            counts['final_nuclei'] = len(np.unique(nuclei)) - 1
+            print(f"Number of nuclei segmented: {counts['final_nuclei']}")
+            counts_df = pd.DataFrame([counts])
 
-            return nuclei
+            if return_counts:
+                return nuclei, counts_df
+            else:
+                return nuclei
 
     
     @staticmethod
@@ -734,8 +814,98 @@ class Snake():
         red, green, blue = img_as_ubyte(blank), img_as_ubyte(cyto), img_as_ubyte(dapi)
 
         # Stack the channels to create the RGB image and transpose the dimensions
-        return np.array([red, green, blue]).transpose([1, 2, 0])
+        # return np.array([red, green, blue]).transpose([1, 2, 0])
+        return np.array([red, green, blue])
 
+    @staticmethod
+    def _identify_cytoplasm(nuclei, cells):
+        """
+        Identifies and isolates the cytoplasm region in an image by subtracting the nuclei region from the cells region.
+
+        Parameters:
+        nuclei (ndarray): A 2D array representing the nuclei regions.
+        cells (ndarray): A 2D array representing the cells regions.
+
+        Returns:
+        ndarray: A 2D array representing the cytoplasm regions.
+        """
+        # Subtract nuclei from cells to get an initial estimate of the cytoplasm
+        cytoplasms = cells - nuclei
+
+        # Extract the border elements of the cells array
+        cut_1 = np.concatenate([cells[0, :], cells[-1, :], cells[:, 0], cells[:, -1]])
+
+        # Get elements that are unique to cells but not in the initial cytoplasm estimate
+        cut_2 = np.array(list(set(np.unique(cells)) - set(np.unique(cytoplasms))))
+
+        # Get elements that are unique to nuclei but not in cells
+        cut_3 = np.array(list(set(np.unique(nuclei)) - set(np.unique(cells))))
+
+        # Combine all the cuts to form a comprehensive cut array
+        cut = np.concatenate([cut_1, cut_2])
+
+        # Set the elements in cells and nuclei arrays to 0 where the cut elements are present
+        cells.flat[np.in1d(cells, np.unique(cut))] = 0
+        nuclei.flat[np.in1d(nuclei, np.unique(cut))] = 0
+
+        # Recalculate the cytoplasm after cleaning up the cells and nuclei arrays
+        cytoplasms = cells - nuclei
+
+        # Set any values in cytoplasm greater than the max value in cells to 0
+        cytoplasms[cytoplasms > cells.max()] = 0
+        
+        # Calculate the number of identified cytoplasms (excluding background label)
+        num_cytoplasm_segmented = len(np.unique(cytoplasms)) - 1
+        print(f"Number of cytoplasms identified: {num_cytoplasm_segmented}")
+        
+        # Return the final cytoplasm array
+        return cytoplasms
+
+    @staticmethod
+    def _identify_cytoplasm_cellpose(nuclei, cells):
+        """
+        Identifies and isolates the cytoplasm region in an image based on the provided nuclei and cells masks.
+
+        Parameters:
+        nuclei (ndarray): A 2D array representing the nuclei regions.
+        cells (ndarray): A 2D array representing the cells regions.
+
+        Returns:
+        ndarray: A 2D array representing the cytoplasm regions.
+        """
+        # Check if the number of unique labels in nuclei and cells are the same
+        if len(np.unique(nuclei)) != len(np.unique(cells)):
+            return None  # Break out of the function if the masks are not compatible
+        
+        # Create an empty cytoplasmic mask with the same shape as cells
+        cytoplasms = np.zeros(cells.shape)  
+        
+        # Iterate over each unique cell label
+        for cell_label in np.unique(cells):
+            # Skip if the cell label is 0 (background)
+            if cell_label == 0:
+                continue
+            
+            # Find the corresponding nucleus label for this cell
+            nucleus_label = cell_label
+            
+            # Get the coordinates of the nucleus and cell regions
+            nucleus_coords = np.argwhere(nuclei == nucleus_label)
+            cell_coords = np.argwhere(cells == cell_label)
+            
+            # Update the cytoplasmic mask with the cell region
+            cytoplasms[cell_coords[:, 0], cell_coords[:, 1]] = cell_label
+            
+            # Remove the nucleus region from the cytoplasmic mask
+            cytoplasms[nucleus_coords[:, 0], nucleus_coords[:, 1]] = 0
+
+        # Calculate the number of identified cytoplasms (excluding background label)
+        num_cytoplasm_segmented = len(np.unique(cytoplasms)) - 1
+        print(f"Number of cytoplasms identified: {num_cytoplasm_segmented}")
+        
+        # Return the final cytoplasm array
+        return cytoplasms.astype(int)
+    
     # IN SITU
 
     @staticmethod
@@ -896,7 +1066,42 @@ class Snake():
 
         return df_bases
 
+    @staticmethod
+    def _analyze_single(data, alignment_ref, cells, peaks, threshold_peaks, wildcards, channel_ix=1):
+        """
+        Combine transform_log, max_filter, extract_bases into one function
 
+        Args:
+            data (numpy.ndarray): Raw sequencing data.
+            alignment_ref (numpy.ndarray): Reference alignment data.
+            cells (numpy.ndarray): Labeled segmentation mask defining cell objects.
+            peaks (numpy.ndarray): Peaks data.
+            threshold_peaks (float): Peak threshold value.
+            wildcards (dict): Metadata to include in the output table.
+            channel_ix (int): Index of the channel to analyze. Default is 1.
+
+        Returns:
+            pandas.DataFrame: Table of extracted bases for each cell.
+        """
+        # If alignment reference has 3 dimensions, extract the first slice
+        if alignment_ref.ndim == 3:
+            alignment_ref = alignment_ref[0]
+
+        # Prepare data for alignment and analysis
+        data = np.array([[alignment_ref, alignment_ref], data[[0, channel_ix]]])
+
+        # Align data between cycles
+        aligned = ops.process.Align.align_between_cycles(data, 0, window=2)
+
+        # Transform aligned data using logarithm
+        loged = Snake._transform_log(aligned[1, 1])
+
+        # Apply max filter to the transformed data
+        maxed = Snake._max_filter(loged, width=3)
+
+        # Extract bases using maximum filtered data
+        return Snake._extract_bases(maxed, peaks, cells, bases=['-'], threshold_peaks=threshold_peaks, wildcards=wildcards)
+    
     @staticmethod
     def _call_reads(df_bases, peaks=None, correction_only_in_cells=True, normalize_bases=True):
         """
@@ -1002,44 +1207,7 @@ class Snake():
             )
 
 
-
-    # PHENOTYPE FEATURE EXTRACTION
-
-    @staticmethod
-    def _annotate_bases_on_SBS_log(log, df_reads):
-        """
-        Annotate bases on a Single Base Sequencing (SBS) log.
-
-        This function takes a log of SBS sequencing data and a DataFrame of reads, 
-        then annotates the bases on the log according to the reads.
-
-        Args:
-            log (numpy.ndarray): The SBS sequencing log with shape (cycles, channels, height, width).
-            df_reads (pandas.DataFrame): DataFrame containing reads information.
-
-        Returns:
-            numpy.ndarray: Annotated SBS log with bases.
-
-        Note:
-            Assumes that the `ops.annotate.annotate_bases()` function is available.
-
-        """
-        # Get dimensions of the SBS log
-        cycles, channels, height, width = log.shape
-
-        # Annotate bases on reads
-        base_labels = ops.annotate.annotate_bases(df_reads, width=3, shape=(height, width))
-
-        # Create an array to store annotated log
-        annotated = np.zeros((cycles, channels + 1, height, width), dtype=np.uint16)
-
-        # Copy original log to annotated log
-        annotated[:, :channels] = log
-
-        # Add annotated bases to the last channel
-        annotated[:, channels] = base_labels
-
-        return annotated
+    # ANNOTATE FUNCTIONS
 
     @staticmethod
     def _annotate_segment_on_sequencing_data(data, nuclei, cells):
@@ -1084,10 +1252,87 @@ class Snake():
 
         return np.squeeze(annotated)
 
+    @staticmethod
+    def _annotate_on_phenotyping_data(data, nuclei, cells):
+        """
+        Annotate outlines of nuclei and cells on phenotyping data.
+
+        This function overlays outlines of nuclei and cells on the provided phenotyping data.
+
+        Args:
+            data (numpy.ndarray): Phenotyping data with shape (channels, height, width).
+            nuclei (numpy.ndarray): Array representing nuclei outlines.
+            cells (numpy.ndarray): Array representing cells outlines.
+
+        Returns:
+            numpy.ndarray: Annotated phenotyping data with outlines of nuclei and cells.
+
+        Note:
+            Assumes that the `ops.annotate.outline_mask()` function is available.
+        """
+        # Import necessary function from ops.annotate module
+        from ops.annotate import outline_mask
+
+        # Ensure data has at least 3 dimensions
+        if data.ndim == 2:
+            data = data[None]
+
+        # Get dimensions of the phenotyping data
+        channels, height, width = data.shape
+
+        # Create an array to store annotated data
+        annotated = np.zeros((channels + 1, height, width), dtype=np.uint16)
+
+        # Generate combined mask for nuclei and cells outlines
+        mask = ((outline_mask(nuclei, direction='inner') > 0) +
+                (outline_mask(cells, direction='inner') > 0))
+
+        # Copy original data to annotated data
+        annotated[:channels] = data
+
+        # Add combined mask to the last channel
+        annotated[channels] = mask
+
+        return np.squeeze(annotated)
+    
+    @staticmethod
+    def _annotate_bases_on_SBS_log(log, df_reads):
+        """
+        Annotate bases on a Single Base Sequencing (SBS) log.
+
+        This function takes a log of SBS sequencing data and a DataFrame of reads, 
+        then annotates the bases on the log according to the reads.
+
+        Args:
+            log (numpy.ndarray): The SBS sequencing log with shape (cycles, channels, height, width).
+            df_reads (pandas.DataFrame): DataFrame containing reads information.
+
+        Returns:
+            numpy.ndarray: Annotated SBS log with bases.
+
+        Note:
+            Assumes that the `ops.annotate.annotate_bases()` function is available.
+
+        """
+        # Get dimensions of the SBS log
+        cycles, channels, height, width = log.shape
+
+        # Annotate bases on reads
+        base_labels = ops.annotate.annotate_bases(df_reads, width=3, shape=(height, width))
+
+        # Create an array to store annotated log
+        annotated = np.zeros((cycles, channels + 1, height, width), dtype=np.uint16)
+
+        # Copy original log to annotated log
+        annotated[:, :channels] = log
+
+        # Add annotated bases to the last channel
+        annotated[:, channels] = base_labels
+
+        return annotated
 
     @staticmethod
-    def _annotate_SBS_extra(log, peaks, df_reads, barcode_table, sbs_cycles,
-                            shape=(1024, 1024)):
+    def _annotate_bases_on_SBS_reads_peaks(log, peaks, df_reads, barcode_table, sbs_cycles, shape=(1024, 1024), return_channels="both"):
         """
         Annotate additional features on Single Base Sequencing (SBS) data.
 
@@ -1111,7 +1356,7 @@ class Snake():
         # Define a lambda function to extract prefixes from barcodes
         barcode_to_prefix = lambda x: ''.join(x[c - 1] for c in sbs_cycles)
         # Extract prefixes from barcodes
-        barcodes = [barcode_to_prefix(x) for x in barcode_table['barcode']]
+        barcodes = [barcode_to_prefix(x) for x in barcode_table['sgRNA']]
 
         # Mark reads as mapped or unmapped based on barcodes
         df_reads['mapped'] = df_reads['barcode'].isin(barcodes)
@@ -1132,18 +1377,22 @@ class Snake():
         top_right = [[0, 0, 0],
                      [0, 0, 0],
                      [1, 0, 0]]
-
+        donut = [[1, 1, 1],
+                 [1, 1, 1],
+                 [1, 1, 1]]
+        
+        
         # Annotate bases for mapped and unmapped reads
         f = ops.annotate.annotate_bases
-        base_labels = f(df_reads.query('mapped'), selem=notch)
-        base_labels += f(df_reads.query('~mapped'), selem=plus)
+        base_labels = f(df_reads.query('mapped'), selem=plus, shape=shape)
+        base_labels += f(df_reads.query('~mapped'), selem=xcross, shape=shape)
 
         # Annotate quality scores
-        Q_min = ops.annotate.annotate_points(df_reads, 'Q_min', selem=top_right)
+        Q_min = ops.annotate.annotate_points(df_reads, 'Q_min', selem=top_right, shape=shape)
         Q_30 = (Q_min * 30).astype(int)
 
-        # Create a "donut" around each peak indicating the peak intensity
-        peaks_donut = skimage.morphology.dilation(peaks, selem=np.ones((3, 3)))
+        # Create a "donut" around each peak indicating the peak intensity and other elements, maybe need to fix, review with Owen
+        peaks_donut = skimage.morphology.dilation(peaks, selem=donut)
         peaks_donut[peaks > 0] = 0
         peaks_donut[base_labels.sum(axis=0) > 0] = 0
         peaks_donut[Q_30 > 0] = 0
@@ -1162,9 +1411,15 @@ class Snake():
 
         # Add peaks donut to the second last channel
         annotated[:, channels + 1] = peaks_donut
-
-        return annotated[:, 1:]
-
+               
+        if return_channels=="both":
+            return annotated
+        elif return_channels=="reads":
+            return annotated[:, [i for i in range(0, 6)], :, :]
+        elif return_channels=="peaks":
+            return annotated[:, [i for i in range(0, 5)] + [6], :, :]
+    
+    # PHENOTYPE FEATURE EXTRACTION
 
     @staticmethod
     def _extract_features(data, labels, wildcards, features=None, multichannel=False):
@@ -1327,6 +1582,54 @@ class Snake():
 
         return df_phenotype
 
+    @staticmethod
+    def _extract_named_cell_nucleus_cytoplasm_features(
+            data, cells, nuclei, cytoplasm, cell_features, nucleus_features, cytoplasm_features, wildcards, 
+            autoscale=True, join='inner'):
+        """
+        Extract named features for cell, nucleus, and cytoplasm labels, and join the results.
+
+        Parameters:
+        data (ndarray): The primary data array.
+        cells (ndarray): A 2D array representing the cells regions.
+        nuclei (ndarray): A 2D array representing the nuclei regions.
+        cytoplasm (ndarray): A 2D array representing the cytoplasm regions.
+        cell_features (list): List of features to extract from cell regions.
+        nucleus_features (list): List of features to extract from nucleus regions.
+        cytoplasm_features (list): List of features to extract from cytoplasm regions.
+        wildcards (dict): A dictionary of additional metadata to add to the output.
+        autoscale (bool): If True, scale the cell and nuclei mask dimensions to match the data. Default is True.
+        join (str): The type of join to use when merging features ('inner', 'outer', etc.). Default is 'inner'.
+
+        Returns:
+        DataFrame: A pandas DataFrame containing the extracted features, merged by the specified join type.
+        """
+        if autoscale:
+            # Scale the cell, nuclei, and cytoplasm arrays to match the dimensions of the data array
+            cells = ops.utils.match_size(cells, data[0])
+            nuclei = ops.utils.match_size(nuclei, data[0])
+            cytoplasm = ops.utils.match_size(cytoplasm, data[0])
+
+        # Ensure that 'label' is a feature in the cell, nucleus, and cytoplasm feature lists
+        assert 'label' in cell_features and 'label' in nucleus_features and 'label' in cytoplasm_features
+
+        # Extract features for cells, nuclei, and cytoplasm, and rename the columns to distinguish them
+        df_phenotype = pd.concat([
+            Snake._extract_named_features(data, cells, cell_features, {})
+                .set_index('label').rename(columns=lambda x: x + '_cell'),
+            Snake._extract_named_features(data, nuclei, nucleus_features, {})
+                .set_index('label').rename(columns=lambda x: x + '_nucleus'),
+            Snake._extract_named_features(data, cytoplasm, cytoplasm_features, {})
+                .set_index('label').rename(columns=lambda x: x + '_cytoplasm'),
+        ], join=join, axis=1).reset_index().rename(columns={'label': 'cell'})
+
+        # Add wildcard metadata to the DataFrame
+        for k, v in sorted(wildcards.items()):
+            df_phenotype[k] = v
+
+        return df_phenotype
+    
+    
     @staticmethod
     def _extract_phenotype_nuclei_cells(data_phenotype, nuclei, cells, features_n, features_c, wildcards, columns=None,
                                          multichannel=False):
@@ -1861,9 +2164,10 @@ class Snake():
         return pd.concat(dfs, axis=1, join='outer', sort=True).reset_index()
 
     @staticmethod
-    def _extract_phenotype_cp_multichannel(data_phenotype, nuclei, cells, wildcards, 
-        nucleus_channels='all', cell_channels='all', foci_channel=None,
-        channel_names=['dapi','tubulin','gh2ax','phalloidin']):
+    def _extract_phenotype_cp_multichannel(data_phenotype, nuclei, cells, wildcards, cytoplasms=None,  
+                                           nucleus_channels='all', cell_channels='all', cytoplasm_channels='all', 
+                                           foci_channel=None,
+                                           channel_names=['dapi','tubulin','gh2ax','phalloidin']):
         """
         Extract phenotype features from CellProfiler-like data with multi-channel functionality.
 
@@ -1871,6 +2175,7 @@ class Snake():
         - data_phenotype (numpy.ndarray): Phenotype data array of shape (..., CHANNELS, I, J).
         - nuclei (numpy.ndarray): Nuclei segmentation data.
         - cells (numpy.ndarray): Cell segmentation data.
+        - cytoplasms (numpy.ndarray, optional): Cytoplasmic segmentation data.
         - wildcards (dict): Dictionary containing wildcards.
         - nucleus_channels (str or list): List of nucleus channel indices to consider or 'all'.
         - cell_channels (str or list): List of cell channel indices to consider or 'all'.
@@ -1892,6 +2197,12 @@ class Snake():
                 cell_channels = list(range(data_phenotype.shape[-3]))
             except:
                 cell_channels = [0]
+                
+        if cytoplasm_channels == 'all':
+            try:
+                cytoplasm_channels = list(range(data_phenotype.shape[-3]))
+            except:
+                cytoplasm_channels = [0]
 
         dfs = []
 
@@ -1937,6 +2248,15 @@ class Snake():
                    .add_prefix('cell_')
                    )
 
+        # Extract cytoplasmic features if cytoplasms are provided
+        if cytoplasms is not None:
+            cytoplasmic_columns = make_column_map(cytoplasm_channels)
+            dfs.append(Snake._extract_features(data_phenotype[..., cytoplasm_channels, :, :], cytoplasms, dict(), features, multichannel=True)
+                       .rename(columns=cytoplasmic_columns)
+                       .set_index('label')
+                       .add_prefix('cytoplasm_')
+                       )
+
         # Extract foci features if foci channel is provided
         if foci_channel is not None:
             foci = ops.process.find_foci(data_phenotype[..., foci_channel, :, :], remove_border_foci=True)
@@ -1955,47 +2275,225 @@ class Snake():
                    .set_index('label')
                    .add_prefix('cell_')
                    )
+        if cytoplasms is not None:
+            dfs.append(ops.cp_emulator.neighbor_measurements(cytoplasms, distances=[1])
+                       .set_index('label')
+                       .add_prefix('cytoplasm_')
+                      )
 
         # Concatenate data frames and reset index
         return pd.concat(dfs, axis=1, join='outer', sort=True).reset_index()
 
-
+    # HASH
+    
     @staticmethod
-    def _analyze_single(data, alignment_ref, cells, peaks, threshold_peaks, wildcards, channel_ix=1):
+    def _merge_sbs_phenotype(sbs_tables, phenotype_tables, barcode_table, sbs_cycles, join='outer'):
         """
-        Analyze single-cell data aligned to a reference, extracting bases.
+        Combine sequencing and phenotype tables with one row per cell, using key (well, tile, cell).
+        This was used when merging was between images at the same magnification.
 
         Args:
-            data (numpy.ndarray): Raw sequencing data.
-            alignment_ref (numpy.ndarray): Reference alignment data.
-            cells (numpy.ndarray): Labeled segmentation mask defining cell objects.
-            peaks (numpy.ndarray): Peaks data.
-            threshold_peaks (float): Peak threshold value.
-            wildcards (dict): Metadata to include in the output table.
-            channel_ix (int): Index of the channel to analyze. Default is 1.
+            sbs_tables (list of pandas.DataFrame): List of sequencing tables.
+            phenotype_tables (list of pandas.DataFrame): List of phenotype tables.
+            barcode_table (pandas.DataFrame): Barcode table.
+            sbs_cycles (list): List of cycle indices.
+            join (str): Method of joining the tables. Default is 'outer'.
 
         Returns:
-            pandas.DataFrame: Table of extracted bases for each cell.
+            pandas.DataFrame: Combined table with one row per cell.
+            
+        Note:
+            The cell column labels must be the same in both tables (e.g., both 
+            tables generated from the same cell or nuclei segmentation). The default method of joining
+            (outer) preserves cells present in only the sequencing table or phenotype table.        
+            The barcode table is then joined using its `barcode` column to the most abundant 
+            (`cell_barcode_0`) and second-most abundant (`cell_barcode_1`) barcodes for each cell. 
+
         """
-        # If alignment reference has 3 dimensions, extract the first slice
-        if alignment_ref.ndim == 3:
-            alignment_ref = alignment_ref[0]
+        # Ensure sbs_tables and phenotype_tables are lists
+        if isinstance(sbs_tables, pd.DataFrame):
+            sbs_tables = [sbs_tables]
+        if isinstance(phenotype_tables, pd.DataFrame):
+            phenotype_tables = [phenotype_tables]
 
-        # Prepare data for alignment and analysis
-        data = np.array([[alignment_ref, alignment_ref], data[[0, channel_ix]]])
+        # Set columns for indexing
+        cols = ['well', 'tile', 'cell']
 
-        # Align data between cycles
-        aligned = ops.process.Align.align_between_cycles(data, 0, window=2)
+        # Concatenate sequencing and phenotype tables
+        df_sbs = pd.concat(sbs_tables).set_index(cols)
+        df_phenotype = pd.concat(phenotype_tables).set_index(cols)
+        df_combined = pd.concat([df_sbs, df_phenotype], join=join, axis=1).reset_index()
 
-        # Transform aligned data using logarithm
-        loged = Snake._transform_log(aligned[1, 1])
+        # Generate prefixes from barcodes for joining
+        barcode_to_prefix = lambda x: ''.join(x[c - 1] for c in sbs_cycles)
+        df_barcodes = (barcode_table
+                       .assign(prefix=lambda x: x['barcode'].apply(barcode_to_prefix))
+                       .assign(duplicate_prefix=lambda x: x['prefix'].duplicated(keep=False))
+                       )
 
-        # Apply max filter to the transformed data
-        maxed = Snake._max_filter(loged, width=3)
+        # Drop 'barcode' column if 'sgRNA' column is present
+        if 'barcode' in df_barcodes and 'sgRNA' in df_barcodes:
+            df_barcodes = df_barcodes.drop('barcode', axis=1)
 
-        # Extract bases using maximum filtered data
-        return Snake._extract_bases(maxed, peaks, cells, bases=['-'], threshold_peaks=threshold_peaks, wildcards=wildcards)
+        # Set barcode information for joining
+        barcode_info = df_barcodes.set_index('prefix')
 
+        # Join barcode information to combined table
+        return (df_combined
+                .join(barcode_info, on='cell_barcode_0')
+                .join(barcode_info.rename(columns=lambda x: x + '_1'), on='cell_barcode_1')
+                )
+
+    
+    @staticmethod
+    def _merge_triangle_hash(df_0, df_1, alignment, threshold=2):
+        """
+        Merge two dataframes using triangle hashing. This is done after images at different 
+        magnifications are hashed together.
+
+        Args:
+            df_0 (pandas.DataFrame): First dataframe.
+            df_1 (pandas.DataFrame): Second dataframe.
+            alignment (dict): Alignment parameters containing rotation and translation.
+            threshold (int): Threshold value. Default is 2.
+
+        Returns:
+            pandas.DataFrame: Merged dataframe.
+        """
+        # Import necessary modules
+        import ops.triangle_hash as th
+
+        # Rename 'tile' column to 'site' in df_1
+        df_1 = df_1.rename(columns={'tile': 'site'})
+
+        # Build linear model
+        model = th.build_linear_model(alignment['rotation'], alignment['translation'])
+
+        # Merge dataframes using triangle hashing
+        return th.merge_sbs_phenotype(df_0, df_1, model, threshold=threshold)
+
+
+    # PARAMSEARCH    
+    
+    @staticmethod
+    def _summarize_paramsearch_segmentation(data, segmentations):
+        """
+        Summarize parameter search results for segmentation.
+
+        Args:
+            data (numpy.ndarray): Array containing segmentation data.
+            segmentations (list of numpy.ndarray): List of segmentation data arrays.
+
+        Returns:
+            numpy.ndarray: Summary array.
+        """
+        # Stack data and compute median
+        summary = np.stack([data[0], np.median(data[1:], axis=0)] + segmentations)
+
+        return summary
+
+
+    @staticmethod
+    def _summarize_paramsearch_reads(barcode_table, reads_tables, cells, sbs_cycles, figure_output):
+        """
+        Summarize parameter search results for read mapping.
+
+        Args:
+            barcode_table (pandas.DataFrame): Barcode table.
+            reads_tables (list of pandas.DataFrame): List of read tables.
+            cells (list of numpy.ndarray): List of cell segmentation masks.
+            sbs_cycles (list): List of cycle indices.
+            figure_output (str): File path for the output figure.
+
+        Returns:
+            pandas.DataFrame: Summary dataframe.
+        """
+        # Import necessary modules
+        import matplotlib
+        import seaborn as sns
+
+        # Set matplotlib backend to 'Agg'
+        matplotlib.use('Agg')
+
+        # Define function to generate barcode prefixes
+        barcode_to_prefix = lambda x: ''.join(x[c - 1] for c in sbs_cycles)
+
+        # Extract unique barcodes from the barcode table
+        barcodes = (barcode_table
+                    .assign(prefix=lambda x: x['barcode'].apply(barcode_to_prefix))
+                    ['prefix']
+                    .pipe(set)
+                    )
+
+        # Compute the number of cells per frame
+        n_cells = [(len(np.unique(labels))-1) for labels in cells]
+
+        # Concatenate read tables and add total cells count to each frame's data
+        df_reads = pd.concat(reads_tables)
+        df_reads = pd.concat([df.assign(total_cells=cell_count) 
+                              for cell_count, (_, df) in zip(n_cells, df_reads.groupby(['well', 'tile'], sort=False))
+                             ])
+
+        # Flag reads as mapped or unmapped based on barcodes
+        df_reads['mapped'] = df_reads['barcode'].isin(barcodes)
+
+        # Define function to compute summary statistics
+        def summarize(df):
+            return pd.Series({
+                'mapped_reads': df['mapped'].value_counts()[True],
+                'mapped_reads_within_cells': df.query('cell != 0')['mapped'].value_counts()[True],
+                'mapping_rate': df['mapped'].value_counts(normalize=True)[True],
+                'mapping_rate_within_cells': df.query('cell != 0')['mapped'].value_counts(normalize=True)[True],
+                'average_reads_per_cell': len(df.query('cell != 0')) / df.iloc[0]['total_cells'],
+                'average_mapped_reads_per_cell': len(df.query('(cell != 0) & (mapped)')) / df.iloc[0]['total_cells'],
+                'cells_with_reads': df.query('(cell != 0)')['cell'].nunique(),
+                'cells_with_mapped_reads': df.query('(cell != 0) & (mapped)')['cell'].nunique()
+            })
+
+        # Group data by parameters and apply summary function
+        df_summary = df_reads.groupby(['well', 'tile', 'THRESHOLD_READS']).apply(summarize).reset_index()
+
+        # Plotting
+        fig, axes = matplotlib.pyplot.subplots(2, 1, figsize=(7, 10), sharex=True)
+        axes_right = [ax.twinx() for ax in axes]
+
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapping_rate', color='steelblue', ax=axes[0])
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapped_reads', color='coral', ax=axes_right[0])
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapping_rate_within_cells', color='steelblue', ax=axes[0])
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapped_reads_within_cells', color='coral', ax=axes_right[0])
+
+        axes[0].set_ylabel('Mapping rate', fontsize=16)
+        axes_right[0].set_ylabel('Number of mapped reads', fontsize=16)
+        axes[0].set_title('Read mapping', fontsize=18)
+
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='average_reads_per_cell', color='steelblue', ax=axes[1])
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='average_mapped_reads_per_cell', color='steelblue', ax=axes[1])
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='cells_with_reads', color='coral', ax=axes_right[1])
+        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='cells_with_mapped_reads', color='coral', ax=axes_right[1])
+
+        axes[1].set_ylabel('Mean reads per cell', fontsize=16)
+        axes_right[1].set_ylabel('Number of cells', fontsize=16)
+        axes[1].set_title('Read mapping per cell', fontsize=18)
+
+        [ax.get_lines()[1].set_linestyle('--') for ax in list(axes)+list(axes_right)]
+
+        axes[0].legend(handles=axes[0].get_lines()+axes_right[0].get_lines(),
+                       labels=['Mapping rate, all reads', 'Mapping rate, within cells', 'All mapped reads', 'Mapped reads within cells'], loc=7)
+        axes[1].legend(handles=axes[1].get_lines()+axes_right[1].get_lines(),
+                       labels=['Mean reads per cell', 'Mean mapped reads per cell', 'Cells with reads', 'Cells with mapped reads'], loc=1)
+
+        axes[1].set_xlabel('THRESHOLD_READS', fontsize=16)
+        axes[1].set_xticks(df_summary['THRESHOLD_READS'].unique()[::2])
+
+        [ax.tick_params(axis='y', colors='steelblue') for ax in axes]
+        [ax.tick_params(axis='y', colors='coral') for ax in axes_right]
+
+        matplotlib.pyplot.savefig(figure_output, dpi=300, bbox_inches='tight')
+
+        return df_summary
+    
+    # TIMELAPSE
+    
     @staticmethod
     def _align_stage_drift(data, frames=10):
         """
@@ -2127,203 +2625,6 @@ class Snake():
         return (df_relabel.drop(columns=['cell']).rename(columns={'relabel': 'cell'}), relabeled.astype(np.uint16))
 
 
-    # HASH
-    
-    @staticmethod
-    def _merge_sbs_phenotype(sbs_tables, phenotype_tables, barcode_table, sbs_cycles, join='outer'):
-        """
-        Combine sequencing and phenotype tables with one row per cell, using key (well, tile, cell).
-
-        Args:
-            sbs_tables (list of pandas.DataFrame): List of sequencing tables.
-            phenotype_tables (list of pandas.DataFrame): List of phenotype tables.
-            barcode_table (pandas.DataFrame): Barcode table.
-            sbs_cycles (list): List of cycle indices.
-            join (str): Method of joining the tables. Default is 'outer'.
-
-        Returns:
-            pandas.DataFrame: Combined table with one row per cell.
-        """
-        # Ensure sbs_tables and phenotype_tables are lists
-        if isinstance(sbs_tables, pd.DataFrame):
-            sbs_tables = [sbs_tables]
-        if isinstance(phenotype_tables, pd.DataFrame):
-            phenotype_tables = [phenotype_tables]
-
-        # Set columns for indexing
-        cols = ['well', 'tile', 'cell']
-
-        # Concatenate sequencing and phenotype tables
-        df_sbs = pd.concat(sbs_tables).set_index(cols)
-        df_phenotype = pd.concat(phenotype_tables).set_index(cols)
-        df_combined = pd.concat([df_sbs, df_phenotype], join=join, axis=1).reset_index()
-
-        # Generate prefixes from barcodes for joining
-        barcode_to_prefix = lambda x: ''.join(x[c - 1] for c in sbs_cycles)
-        df_barcodes = (barcode_table
-                       .assign(prefix=lambda x: x['barcode'].apply(barcode_to_prefix))
-                       .assign(duplicate_prefix=lambda x: x['prefix'].duplicated(keep=False))
-                       )
-
-        # Drop 'barcode' column if 'sgRNA' column is present
-        if 'barcode' in df_barcodes and 'sgRNA' in df_barcodes:
-            df_barcodes = df_barcodes.drop('barcode', axis=1)
-
-        # Set barcode information for joining
-        barcode_info = df_barcodes.set_index('prefix')
-
-        # Join barcode information to combined table
-        return (df_combined
-                .join(barcode_info, on='cell_barcode_0')
-                .join(barcode_info.rename(columns=lambda x: x + '_1'), on='cell_barcode_1')
-                )
-
-    
-    @staticmethod
-    def _merge_triangle_hash(df_0, df_1, alignment, threshold=2):
-        """
-        Merge two dataframes using triangle hashing.
-
-        Args:
-            df_0 (pandas.DataFrame): First dataframe.
-            df_1 (pandas.DataFrame): Second dataframe.
-            alignment (dict): Alignment parameters containing rotation and translation.
-            threshold (int): Threshold value. Default is 2.
-
-        Returns:
-            pandas.DataFrame: Merged dataframe.
-        """
-        # Import necessary modules
-        import ops.triangle_hash as th
-
-        # Rename 'tile' column to 'site' in df_1
-        df_1 = df_1.rename(columns={'tile': 'site'})
-
-        # Build linear model
-        model = th.build_linear_model(alignment['rotation'], alignment['translation'])
-
-        # Merge dataframes using triangle hashing
-        return th.merge_sbs_phenotype(df_0, df_1, model, threshold=threshold)
-
-
-    @staticmethod
-    def _summarize_paramsearch_segmentation(data, segmentations):
-        """
-        Summarize parameter search results for segmentation.
-
-        Args:
-            data (numpy.ndarray): Array containing segmentation data.
-            segmentations (list of numpy.ndarray): List of segmentation data arrays.
-
-        Returns:
-            numpy.ndarray: Summary array.
-        """
-        # Stack data and compute median
-        summary = np.stack([data[0], np.median(data[1:], axis=0)] + segmentations)
-
-        return summary
-
-
-    @staticmethod
-    def _summarize_paramsearch_reads(barcode_table, reads_tables, cells, sbs_cycles, figure_output):
-        """
-        Summarize parameter search results for read mapping.
-
-        Args:
-            barcode_table (pandas.DataFrame): Barcode table.
-            reads_tables (list of pandas.DataFrame): List of read tables.
-            cells (list of numpy.ndarray): List of cell segmentation masks.
-            sbs_cycles (list): List of cycle indices.
-            figure_output (str): File path for the output figure.
-
-        Returns:
-            pandas.DataFrame: Summary dataframe.
-        """
-        # Import necessary modules
-        import matplotlib
-        import seaborn as sns
-
-        # Set matplotlib backend to 'Agg'
-        matplotlib.use('Agg')
-
-        # Define function to generate barcode prefixes
-        barcode_to_prefix = lambda x: ''.join(x[c - 1] for c in sbs_cycles)
-
-        # Extract unique barcodes from the barcode table
-        barcodes = (barcode_table
-                    .assign(prefix=lambda x: x['barcode'].apply(barcode_to_prefix))
-                    ['prefix']
-                    .pipe(set)
-                    )
-
-        # Compute the number of cells per frame
-        n_cells = [(len(np.unique(labels))-1) for labels in cells]
-
-        # Concatenate read tables and add total cells count to each frame's data
-        df_reads = pd.concat(reads_tables)
-        df_reads = pd.concat([df.assign(total_cells=cell_count) 
-                              for cell_count, (_, df) in zip(n_cells, df_reads.groupby(['well', 'tile'], sort=False))
-                             ])
-
-        # Flag reads as mapped or unmapped based on barcodes
-        df_reads['mapped'] = df_reads['barcode'].isin(barcodes)
-
-        # Define function to compute summary statistics
-        def summarize(df):
-            return pd.Series({
-                'mapped_reads': df['mapped'].value_counts()[True],
-                'mapped_reads_within_cells': df.query('cell != 0')['mapped'].value_counts()[True],
-                'mapping_rate': df['mapped'].value_counts(normalize=True)[True],
-                'mapping_rate_within_cells': df.query('cell != 0')['mapped'].value_counts(normalize=True)[True],
-                'average_reads_per_cell': len(df.query('cell != 0')) / df.iloc[0]['total_cells'],
-                'average_mapped_reads_per_cell': len(df.query('(cell != 0) & (mapped)')) / df.iloc[0]['total_cells'],
-                'cells_with_reads': df.query('(cell != 0)')['cell'].nunique(),
-                'cells_with_mapped_reads': df.query('(cell != 0) & (mapped)')['cell'].nunique()
-            })
-
-        # Group data by parameters and apply summary function
-        df_summary = df_reads.groupby(['well', 'tile', 'THRESHOLD_READS']).apply(summarize).reset_index()
-
-        # Plotting
-        fig, axes = matplotlib.pyplot.subplots(2, 1, figsize=(7, 10), sharex=True)
-        axes_right = [ax.twinx() for ax in axes]
-
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapping_rate', color='steelblue', ax=axes[0])
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapped_reads', color='coral', ax=axes_right[0])
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapping_rate_within_cells', color='steelblue', ax=axes[0])
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='mapped_reads_within_cells', color='coral', ax=axes_right[0])
-
-        axes[0].set_ylabel('Mapping rate', fontsize=16)
-        axes_right[0].set_ylabel('Number of mapped reads', fontsize=16)
-        axes[0].set_title('Read mapping', fontsize=18)
-
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='average_reads_per_cell', color='steelblue', ax=axes[1])
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='average_mapped_reads_per_cell', color='steelblue', ax=axes[1])
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='cells_with_reads', color='coral', ax=axes_right[1])
-        sns.lineplot(data=df_summary, x='THRESHOLD_READS', y='cells_with_mapped_reads', color='coral', ax=axes_right[1])
-
-        axes[1].set_ylabel('Mean reads per cell', fontsize=16)
-        axes_right[1].set_ylabel('Number of cells', fontsize=16)
-        axes[1].set_title('Read mapping per cell', fontsize=18)
-
-        [ax.get_lines()[1].set_linestyle('--') for ax in list(axes)+list(axes_right)]
-
-        axes[0].legend(handles=axes[0].get_lines()+axes_right[0].get_lines(),
-                       labels=['Mapping rate, all reads', 'Mapping rate, within cells', 'All mapped reads', 'Mapped reads within cells'], loc=7)
-        axes[1].legend(handles=axes[1].get_lines()+axes_right[1].get_lines(),
-                       labels=['Mean reads per cell', 'Mean mapped reads per cell', 'Cells with reads', 'Cells with mapped reads'], loc=1)
-
-        axes[1].set_xlabel('THRESHOLD_READS', fontsize=16)
-        axes[1].set_xticks(df_summary['THRESHOLD_READS'].unique()[::2])
-
-        [ax.tick_params(axis='y', colors='steelblue') for ax in axes]
-        [ax.tick_params(axis='y', colors='coral') for ax in axes_right]
-
-        matplotlib.pyplot.savefig(figure_output, dpi=300, bbox_inches='tight')
-
-        return df_summary
-
-
     # SNAKEMAKE
 
     @staticmethod
@@ -2373,29 +2674,23 @@ class Snake():
             function: Wrapped function.
         """
         def g(**kwargs):
-            """
-            Wrapped function that accepts and returns filenames for image and table data.
 
-            Args:
-                **kwargs: Keyword arguments.
-
-            Returns:
-                None
-            """
-            # Split keyword arguments into input (needed for function) and output (needed to save result)
+            # split keyword arguments into input (needed for function)
+            # and output (needed to save result)
             input_kwargs, output_kwargs = restrict_kwargs(kwargs, f)
 
-            # Load arguments provided as filenames
-            input_kwargs = {k: load_arg(v) for k, v in input_kwargs.items()}
+            load_kwargs = {}
+            if 'maxworkers' in output_kwargs:
+                load_kwargs['maxworkers'] = output_kwargs.pop('maxworkers')
 
-            # Call the original function with input arguments
+            # load arguments provided as filenames
+            input_kwargs = {k: load_arg(v,**load_kwargs) for k,v in input_kwargs.items()}
+
             results = f(**input_kwargs)
 
-            # Save results if output filename is provided
             if 'output' in output_kwargs:
                 outputs = output_kwargs['output']
-
-                # Ensure results and output filenames match
+                
                 if len(outputs) == 1:
                     results = [results]
 
@@ -2403,9 +2698,11 @@ class Snake():
                     error = '{0} output filenames provided for {1} results'
                     raise ValueError(error.format(len(outputs), len(results)))
 
-                # Save each result with corresponding output filename
                 for output, result in zip(outputs, results):
                     save_output(output, result, **output_kwargs)
+
+            else:
+                return results 
 
         return functools.update_wrapper(g, f)
 

@@ -1,3 +1,20 @@
+"""
+Constants and Color Definitions
+
+This module defines commonly used constants and color maps for data analysis and visualization. 
+
+Constants:
+- Common constants for various data types and attributes, including `WELL`, `DATASET`, `FILE`, and more.
+- Constants specific to in situ data, such as `TILE`, `SITE`, `CELL`, `READ`, `CHANNEL`, etc.
+- Design-related constants like `DIALOUT`, `SUBPOOL`, `DESIGN`, `VECTOR`, `GROUP`, `GENE_ID`, `SGRNA`, etc.
+- Other constants for various use cases, including `STIMULANT`, `GENE_CLASS`, `NM_ID`, `REPLICATE`.
+
+Color Maps:
+- `GLASBEY_INVERTED`: A color map with a predefined set of RGB values for visualization purposes.
+
+"""
+
+
 # Common constants
 WELL = 'well'
 DATASET = 'dataset'

@@ -1,3 +1,21 @@
+"""
+Phenotype Feature Extraction Module
+
+This module provides a comprehensive set of functions for extracting 
+phenotypic features images, (relating to step 2 -- phenotyping). 
+It includes functions for:
+
+1. Segmentation: Functions for identifying secondary objects and cell boundaries.
+2. Intensity Features: Extraction of various intensity-based metrics for cellular regions.
+3. Texture Features: Computation of texture-related features using methods like Haralick and PFTAS.
+4. Shape Features: Calculation of morphological features including Zernike moments and Feret diameters.
+5. Distribution Features: Analysis of intensity distributions within cellular regions.
+6. Neighbor Analysis: Functions for analyzing spatial relationships between cells.
+7. Colocalization Metrics: Computation of various colocalization coefficients for multi-channel images.
+8. Utility Functions: Helper functions for geometric calculations and image processing.
+
+"""
+
 import numpy as np
 from scipy.stats import median_abs_deviation, rankdata # new in version 1.3.0
 from scipy.spatial.distance import pdist
@@ -373,7 +391,7 @@ shape_features = {
 	'area'    : lambda r: r.area,
 	'perimeter' : lambda r: r.perimeter,
 	'convex_area' : lambda r: r.convex_area,
-	'form_factor': lambda r:4*np.pi*r.area/(r.perimeter)**2, #isoperimetric quotient
+    'form_factor': lambda r: form_factor(r.area, r.perimeter), # isoperimetric quotient
 	'solidity': lambda r: r.solidity,
 	'extent': lambda r: r.extent,
 	'euler_number': lambda r: r.euler_number,
@@ -972,28 +990,41 @@ def max_median_mean_radius(filled_image):
 		transformed.mean()
 		)
 
+from scipy.spatial import ConvexHull, QhullError
+import numpy as np
+from scipy.spatial.distance import pdist
+from itertools import combinations
+
 def min_max_feret_diameter(coords):
-	""" outputs: min feret diameter, max feret diameter, 
-	min feret r0,c0,r1,c1 , max feret r0,c0,r1,c1
-	"""
-	hull_vertices = coords[ConvexHull(coords).vertices]
+    """ 
+    Outputs: min feret diameter, max feret diameter, 
+    min feret r0, c0, r1, c1, max feret r0, c0, r1, c1
+    """
+    try:
+        hull_vertices = coords[ConvexHull(coords).vertices]
+        antipodes = get_antipodes(hull_vertices)
+        point_distances = pdist(hull_vertices)
 
-	antipodes = get_antipodes(hull_vertices)
+        argmin, argmax = (antipodes[:,6].argmin(), point_distances.argmax())
+        results = (
+            (antipodes[argmin,6], point_distances[argmax]) +
+            (np.mean([antipodes[argmin,0], antipodes[argmin,2]]), np.mean([antipodes[argmin,1], antipodes[argmin,3]])) +
+            tuple(antipodes[argmin,4:6])
+        )
+        for v in tuple(combinations(hull_vertices, r=2))[argmax]:
+            results += tuple(v)
+    except:
+        results = (np.nan,) * 10
 
-	point_distances = pdist(hull_vertices)
+    return results
 
-	try:
-		argmin,argmax = (antipodes[:,6].argmin(),point_distances.argmax())
-		results = ((antipodes[argmin,6],point_distances[argmax])
-			+(np.mean([antipodes[argmin,0],antipodes[argmin,2]]),np.mean([antipodes[argmin,1],antipodes[argmin,3]]))
-			+tuple(antipodes[argmin,4:6])
-			)
-		for v in tuple(combinations(hull_vertices,r=2))[argmax]:
-			results+=tuple(v)
-	except:
-		results = (np.nan,)*10
-
-	return results
+# Example definition of get_antipodes function
+def get_antipodes(hull_vertices):
+    # Dummy implementation; replace with actual logic
+    n = len(hull_vertices)
+    antipodes = np.zeros((n, 7))
+    antipodes[:, 6] = np.random.random(n)  # Replace with actual calculation
+    return antipodes
 
 def get_antipodes(vertices):
     """rotating calipers"""
@@ -1043,71 +1074,103 @@ def perpendicular_distance(line_p0,line_p1,p0):
         return abs(((line_p1[1]-line_p0[1])*(line_p0[0]-p0[0])-(line_p1[0]-line_p0[0])*(line_p0[1]-p0[1]))/
                 np.sqrt((line_p1[1]-line_p0[1])**2+(line_p1[0]-line_p0[0])**2))
 
-def zernike_minimum_enclosing_circle(coords,degree=9):
-	image, center, diameter = minimum_enclosing_circle_shift(coords)
+def zernike_minimum_enclosing_circle(coords, degree=9):
+    # Check if there are enough coordinates
+    if coords.shape[0] < 3:
+        print("Not enough points to compute the minimum enclosing circle.")
+        return np.array([np.nan] * 30)  # Return NaNs for insufficient points
 
-	return zernike_moments(image, radius=diameter/2, degree=degree, cm=center)
+    try:
+        image, center, diameter = minimum_enclosing_circle_shift(coords)
+        
+        # Check if image and diameter are valid
+        if image is None or diameter <= 0:
+            print("Invalid image or diameter returned from minimum_enclosing_circle_shift.")
+            return np.array([np.nan] * 30)  # Return NaNs
 
-def minimum_enclosing_circle_shift(coords,pad=1):
-	diameter,center = minimum_enclosing_circle(coords)
+        return zernike_moments(image, radius=diameter / 2, degree=degree, cm=center)
 
-	# diameter = np.ceil(diameter)
+    except QhullError as e:
+        print(f"QhullError: {e}")
+        return np.array([np.nan] * 30)  # Return NaNs in case of error
 
-	# have to adjust image size to fit minimum enclosing circle
-	shift = np.round(diameter/2 - center)
-	shifted = np.zeros((int(np.ceil(diameter)+pad),int(np.ceil(diameter)+pad)))
-	# shift = np.round(np.array(shifted.shape)/2 - center)
-	coords_shifted = (coords + shift).astype(int)
-	shifted[coords_shifted[:,0],coords_shifted[:,1]] = 1
-	center_shifted = center + shift
+    
+# Define the form_factor function with a zero-perimeter check
+def form_factor(area, perimeter):
+    if perimeter == 0:
+        return np.nan
+    else:
+        return 4 * np.pi * area / (perimeter ** 2)
 
-	return shifted, center_shifted, np.ceil(diameter)
+def minimum_enclosing_circle_shift(coords, pad=1):
+    diameter, center = minimum_enclosing_circle(coords)
+
+    if diameter is None or center is None:
+        print('Error: Cannot compute minimum enclosing circle.')
+        return None, None, None
+
+    # diameter = np.ceil(diameter)
+
+    # have to adjust image size to fit minimum enclosing circle
+    shift = np.round(diameter / 2 - center)
+    shifted = np.zeros((int(np.ceil(diameter) + pad), int(np.ceil(diameter) + pad)))
+    # shift = np.round(np.array(shifted.shape) / 2 - center)
+    coords_shifted = (coords + shift).astype(int)
+    shifted[coords_shifted[:, 0], coords_shifted[:, 1]] = 1
+    center_shifted = center + shift
+
+    return shifted, center_shifted, np.ceil(diameter)
 
 def minimum_enclosing_circle(coords):
 	# http://www.personal.kent.edu/~rmuhamma/Compgeometry/MyCG/CG-Applets/Center/centercli.htm
 	# https://www.cs.princeton.edu/courses/archive/spring09/cos226/checklist/circle.html
-	hull_vertices = coords[ConvexHull(coords).vertices]
+    try:
+        hull_vertices = coords[ConvexHull(coords).vertices]
 
-	s0 = hull_vertices[0]
-	s1 = hull_vertices[1]
+        s0 = hull_vertices[0]
+        s1 = hull_vertices[1]
 
-	iterations = 0
+        iterations = 0
 
-	while True:
+        while True:
 
-		remaining = hull_vertices[(hull_vertices!=s0).max(axis=1)&(hull_vertices!=s1).max(axis=1)]
+            remaining = hull_vertices[(hull_vertices!=s0).max(axis=1)&(hull_vertices!=s1).max(axis=1)]
 
-		angles = np.array(list(map(partial(angle,p0=s0,p1=s1),remaining)))
-		
-		min_angle = angles.min()
+            angles = np.array(list(map(partial(angle,p0=s0,p1=s1),remaining)))
 
-		if min_angle >= np.pi/2:
-			# circle diameter is s0-s1, center is mean of s0,s1
-			diameter = np.sqrt(((s0-s1)**2).sum())
-			center = (s0+s1)/2
-			break
+            min_angle = angles.min()
 
-		vertex = remaining[np.argmin(angles)]
+            if min_angle >= np.pi/2:
+                # circle diameter is s0-s1, center is mean of s0,s1
+                diameter = np.sqrt(((s0-s1)**2).sum())
+                center = (s0+s1)/2
+                break
 
-		remaining_angles = np.array(list(starmap(angle,zip([s1,s0],[s0,vertex],[vertex,s1]))))
+            vertex = remaining[np.argmin(angles)]
 
-		if remaining_angles.max() <= np.pi/2:
-			# use circumscribing circle of s0,s1,vertex
-			diameter,center = circumscribed_circle(s0,s1,vertex)
-			break
+            remaining_angles = np.array(list(starmap(angle,zip([s1,s0],[s0,vertex],[vertex,s1]))))
 
-		keep = [s0,s1][np.argmax(remaining_angles)]
+            if remaining_angles.max() <= np.pi/2:
+                # use circumscribing circle of s0,s1,vertex
+                diameter,center = circumscribed_circle(s0,s1,vertex)
+                break
 
-		s0 = keep
-		s1 = vertex
+            keep = [s0,s1][np.argmax(remaining_angles)]
 
-		iterations += 1
+            s0 = keep
+            s1 = vertex
 
-		if iterations == len(hull_vertices):
-			print('maximum_enclosing_circle did not converge')
-			diameter = center = None
+            iterations += 1
 
-	return diameter,center
+            if iterations == len(hull_vertices):
+                print('maximum_enclosing_circle did not converge')
+                diameter = center = None
+                
+    except QhullError:
+        print('QhullError: not enough points to construct initial simplex.')
+        diameter = center = None
+
+    return diameter,center
 
 def angle(vertex, p0, p1):
 	v0 = p0 - vertex

@@ -1,3 +1,14 @@
+"""
+Filename Parsing and Generation Utilities
+
+This module provides a set of functions for parsing, generating, and manipulating filenames.
+It includes functions for:
+
+1. Filename Parsing: Functions to extract metadata from complex filename structures.
+2. Filename Generation: Tools to create standardized filenames based on metadata dictionaries.
+
+"""
+
 import re
 import os
 import time

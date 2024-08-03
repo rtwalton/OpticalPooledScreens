@@ -1,3 +1,14 @@
+"""
+HDF5 and ND2 Image Processing Utilities
+This module provides a set of set of functions for file I/O with HDF5 data.
+It includes utilities for:
+
+1. HDF5 Image Saving: Function to save image data and metadata to HDF5 files.
+2. HDF5 Image Reading: Function to read image data from HDF5 files, with optional bounding box selection.
+3. ND2 to HDF5 Conversion: Utility to convert ND2 files to HDF5 format, including metadata extraction and optional Z-projection.
+
+"""
+
 from tables import file
 from tables import open_file
 import numpy as np

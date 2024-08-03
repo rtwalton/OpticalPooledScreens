@@ -1,3 +1,17 @@
+"""
+Image Processing and Feature Extraction Utilities
+
+This module provides a collection of functions for processing images and extracting features 
+(relating to SBS base calling and phenotyping -- steps 1 and 2). It includes functions for:
+
+1. Feature extraction: Identifying and measuring features from image data.
+2. Image segmentation: Segmenting regions of interest in images.
+3. Image registration: Aligning and overlaying images.
+4. Data handling: Organizing and manipulating extracted data for analysis.
+
+"""
+
+
 import warnings
 from collections import defaultdict
 from collections.abc import Iterable
@@ -12,12 +26,13 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 
-from scipy import ndimage
+from scipy import ndimage as ndi
 
 import ops.io
 import ops.utils
 
 # FEATURES
+
 def feature_table(data, labels, features, global_features=None):
     """
     Apply functions in feature dictionary to regions in data specified by integer labels.
@@ -35,7 +50,7 @@ def feature_table(data, labels, features, global_features=None):
         pd.DataFrame: DataFrame containing extracted features with one row per label and one column per feature.
     """
     # Extract regions from the labeled segmentation mask
-    regions = utils.regionprops(labels, intensity_image=data)
+    regions = ops.utils.regionprops(labels, intensity_image=data)
     
     # Initialize a defaultdict to store feature values
     results = defaultdict(list)
@@ -72,7 +87,7 @@ def feature_table_multichannel(data, labels, features, global_features=None):
         pd.DataFrame: DataFrame containing extracted features with one row per label and one column per feature.
     """
     # Extract regions from the labeled segmentation mask
-    regions = utils.regionprops_multichannel(labels, intensity_image=data)
+    regions = ops.utils.regionprops_multichannel(labels, intensity_image=data)
     
     # Initialize a defaultdict to store feature values
     results = defaultdict(list)
@@ -145,6 +160,7 @@ def build_feature_table(stack, labels, features, index):
     
     return pd.concat(results)
 
+# IMAGE PROCESSING
 
 def find_cells(nuclei, mask, remove_boundary_cells=True):
     """
@@ -250,39 +266,42 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
     import skimage.filters
     import warnings
     import ops.utils
-
+    
     N = len(files)
-
+    
+    print(f"{N} files passed into image correction module")
+    
     # Initialize global data variable
     global data
     data = read(files[0])[slicer] / N
-
+    
     def accumulate_image(file):
         global data
         data += read(file)[slicer] / N
-
-    # Accumulate images using threading or sequential processing
+    
+    # Accumulate images using threading or sequential processing, averaging them
     if threading:
         Parallel(n_jobs=-1, require='sharedmem')(delayed(accumulate_image)(file) for file in files[1:])
     else:
         for file in files[1:]:
             accumulate_image(file)
-
-    # Squeeze and convert data to uint16
+    
+    # Squeeze and convert data to uint16 (remove any dimensions of size 1)
     data = np.squeeze(data.astype(np.uint16))
-
+    
     # Calculate default smoothing factor if not provided
     if not smooth:
         smooth = int(np.sqrt((data.shape[-1] * data.shape[-2]) / (np.pi * 20)))
-
+    print(f"Smoothing factor: {smooth}")
+    
     selem = skimage.morphology.disk(smooth)
     median_filter = ops.utils.applyIJ(skimage.filters.median)
-
+    
     # Apply median filter with warning suppression
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         smoothed = median_filter(data, selem, behavior='rank')
-
+    
     # Rescale channels if requested
     if rescale:
         @ops.utils.applyIJ
@@ -293,9 +312,9 @@ def calculate_illumination_correction(files, smooth=None, rescale=True, threadin
             data = data / robust_min
             data[data < 1] = 1
             return data
-
+        
         smoothed = rescale_channels(smoothed)
-
+    
     return smoothed
 
 @ops.utils.applyIJ
@@ -729,7 +748,6 @@ def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
     Returns:
         result (numpy.ndarray): Labeled segmentation mask of nuclei.
     """
-
     # Binarize DAPI image to identify foreground
     mask = binarize(dapi, radius, area_min)
     
@@ -759,130 +777,216 @@ def find_nuclei(dapi, threshold, radius=15, area_min=50, area_max=500,
 
 
 def find_foci(data, radius=3, threshold=10, remove_border_foci=False):
-    tophat = skimage.morphology.white_tophat(data,selem=skimage.morphology.disk(radius))
-    print("finding foci")
+    """
+    Detect foci in the given image using a white tophat filter and other processing steps.
+
+    Parameters:
+        data (numpy.ndarray): Input image data.
+        radius (int, optional): Radius of the disk used in the white tophat filter. Default is 3.
+        threshold (float, optional): Threshold value for identifying foci in the processed image. Default is 10.
+        remove_border_foci (bool, optional): Flag to remove foci touching the image border. Default is False.
+
+    Returns:
+        labeled (numpy.ndarray): Labeled segmentation mask of foci.
+    """
+    # Apply white tophat filter to highlight foci
+    tophat = skimage.morphology.white_tophat(data, selem=skimage.morphology.disk(radius))
+    
+    # Apply Laplacian of Gaussian to the filtered image
     tophat_log = log_ndi(tophat, sigma=radius)
 
+    # Threshold the image to create a binary mask
     mask = tophat_log > threshold
-    mask = skimage.morphology.remove_small_objects(mask,min_size=(radius**2))
+    
+    # Remove small objects from the mask
+    mask = skimage.morphology.remove_small_objects(mask, min_size=(radius**2))
+    
+    # Label connected components in the mask
     labeled = skimage.measure.label(mask)
-    labeled = apply_watershed(labeled,smooth=1)
+    
+    # Apply watershed algorithm to refine segmentation
+    labeled = apply_watershed(labeled, smooth=1)
 
     if remove_border_foci:
-        border_mask = data>0
-        labeled = remove_border(labeled,~border_mask)
+        # Remove foci touching the border
+        border_mask = data > 0
+        labeled = remove_border(labeled, ~border_mask)
 
     return labeled
 
+
 def remove_border(labels, mask, dilate=5):
-    mask = skimage.morphology.binary_dilation(mask,np.ones((dilate,dilate)))
+    """
+    Remove labeled regions that touch the border of the given mask.
+
+    Parameters:
+        labels (numpy.ndarray): Labeled image.
+        mask (numpy.ndarray): Mask indicating the border regions.
+        dilate (int, optional): Number of dilation iterations to apply to the mask. Default is 5.
+
+    Returns:
+        labels (numpy.ndarray): Labeled image with border regions removed.
+    """
+    # Dilate the mask to ensure regions touching the border are included
+    mask = skimage.morphology.binary_dilation(mask, np.ones((dilate, dilate)))
+    
+    # Identify labels that need to be removed
     remove = np.unique(labels[mask])
+    
+    # Remove the identified labels from the labeled image
     labels = labels.copy()
-    labels.flat[np.in1d(labels,remove)] = 0
+    labels.flat[np.in1d(labels, remove)] = 0
+    
     return labels
 
+
 def binarize(image, radius, min_size):
-    """Apply local mean threshold to find outlines. Filter out
-    background shapes. Otsu threshold on list of region mean intensities will remove a few
-    dark cells. Could use shape to improve the filtering.
     """
+    Apply local mean thresholding to binarize the image and remove small objects.
+
+    Parameters:
+        image (numpy.ndarray): Input image.
+        radius (int): Radius of disk used in local mean thresholding.
+        min_size (int): Minimum size of objects to retain.
+
+    Returns:
+        mask (numpy.ndarray): Binary mask of the image.
+    """
+    # Convert image to 8-bit unsigned integers
     dapi = skimage.img_as_ubyte(image)
-    # slower than optimized disk in ImageJ
-    # scipy.ndimage.uniform_filter with square is fast but crappy
+    
+    # Create a disk-shaped structuring element for filtering
     selem = skimage.morphology.disk(radius)
+    
+    # Apply local mean filtering to the image
     mean_filtered = skimage.filters.rank.mean(dapi, selem=selem)
+    
+    # Create a binary mask by thresholding the image
     mask = dapi > mean_filtered
+    
+    # Remove small objects from the mask
     mask = skimage.morphology.remove_small_objects(mask, min_size=min_size)
 
     return mask
 
 
 def filter_by_region(labeled, score, threshold, intensity_image=None, relabel=True):
-    """Apply a filter to label image. The `score` function takes a single region 
-    as input and returns a score. 
-    If scores are boolean, regions where the score is false are removed.
-    Otherwise, the function `threshold` is applied to the list of scores to 
-    determine the minimum score at which a region is kept.
-    If `relabel` is true, the regions are relabeled starting from 1.
     """
+    Apply a filter to label image based on region properties.
+
+    Parameters:
+        labeled (numpy.ndarray): Labeled image.
+        score (function): Function to calculate region score.
+        threshold (float): Threshold value to filter regions.
+        intensity_image (numpy.ndarray, optional): Intensity image for calculating scores. Default is None.
+        relabel (bool, optional): Flag to relabel the regions sequentially. Default is True.
+
+    Returns:
+        labeled (numpy.ndarray): Filtered and relabeled image.
+    """
+    # Copy the labeled image to avoid modifying the original
     labeled = labeled.copy().astype(int)
+    
+    # Compute region properties
     regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
+    
+    # Calculate scores for each region
     scores = np.array([score(r) for r in regions])
 
     if all([s in (True, False) for s in scores]):
+        # Identify regions to cut based on boolean scores
         cut = [r.label for r, s in zip(regions, scores) if not s]
     else:
+        # Determine threshold value for scores
         t = threshold(scores)
         cut = [r.label for r, s in zip(regions, scores) if s < t]
 
+    # Remove identified regions from the labeled image
     labeled.flat[np.in1d(labeled.flat[:], cut)] = 0
     
     if relabel:
+        # Relabel the regions sequentially
         labeled, _, _ = skimage.segmentation.relabel_sequential(labeled)
 
     return labeled
 
 
 def apply_watershed(img, smooth=4):
+    """
+    Apply the watershed algorithm to the given image to refine segmentation.
+
+    Parameters:
+        img (numpy.ndarray): Input binary image.
+        smooth (float, optional): Size of Gaussian kernel used to smooth the distance map. Default is 4.
+
+    Returns:
+        result (numpy.ndarray): Labeled image after watershed segmentation.
+    """
+    # Compute the distance transform of the image
     distance = ndi.distance_transform_edt(img)
+    
     if smooth > 0:
+        # Apply Gaussian smoothing to the distance transform
         distance = skimage.filters.gaussian(distance, sigma=smooth)
+    
+    # Identify local maxima in the distance transform
     local_max = skimage.feature.peak_local_max(
                     distance, indices=False, footprint=np.ones((3, 3)), 
                     exclude_border=False)
 
+    # Label the local maxima
     markers = ndi.label(local_max)[0]
+    
+    # Apply watershed algorithm to the distance transform
     result = skimage.segmentation.watershed(-distance, markers, mask=img)
+    
     return result.astype(np.uint16)
 
 
 def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=False):
-    """Blend array of images, translating image coordinates according to offset matrix.
-    arr : N x I x J
-    positions : N x 2 (n, i, j)
     """
-    
-    # @utils.memoize
-    def make_alpha(s, edge=0.95, edge_width=0.02):
-        """Unity in center, drops off near edge
-        :param s: shape
-        :param edge: mid-point of drop-off
-        :param edge_width: width of drop-off in exponential
-        :return:
-        """
-        sigmoid = lambda r: 1. / (1. + np.exp(-r))
+    Blend an array of images, translating image coordinates according to an offset matrix.
 
+    Parameters:
+        arr (list of numpy.ndarray): List of input images to blend.
+        positions (numpy.ndarray): Array of positions for each image.
+        clip (bool, optional): Flag to clip the output to avoid edge artifacts. Default is True.
+        edge (float, optional): Mid-point of the alpha drop-off. Default is 0.95.
+        edge_width (float, optional): Width of the alpha drop-off in exponential. Default is 0.02.
+        subpixel (bool, optional): Flag to use subpixel accuracy for positions. Default is False.
+
+    Returns:
+        output (numpy.ndarray): Blended image.
+    """
+    def make_alpha(s, edge=0.95, edge_width=0.02):
+        """Generate an alpha mask with drop-off near the edges."""
+        sigmoid = lambda r: 1. / (1. + np.exp(-r))
         x, y = np.meshgrid(range(s[0]), range(s[1]))
         xy = np.concatenate([x[None, ...] - s[0] / 2,
                              y[None, ...] - s[1] / 2])
         R = np.max(np.abs(xy), axis=0)
-
         return sigmoid(-(R - s[0] * edge/2) / (s[0] * edge_width))
 
-    # determine output shape, offset positions as necessary
+    # Determine output shape and offset positions if necessary
     if subpixel:
         positions = np.array(positions)
     else:
         positions = np.round(positions)
-    # convert from ij to xy
     positions = positions[:, [1, 0]]    
-
     positions -= positions.min(axis=0)
     shapes = [a.shape for a in arr]
     output_shape = np.ceil((shapes + positions[:,::-1]).max(axis=0)).astype(int)
 
-    # sum data and alpha layer separately, divide data by alpha
+    # Sum data and alpha layer separately, then divide data by alpha
     output = np.zeros([2] + list(output_shape), dtype=float)
     for image, xy in zip(arr, positions):
         alpha = 100 * make_alpha(image.shape, edge=edge, edge_width=edge_width)
-        if subpixel is False:
+        if not subpixel:
             j, i = np.round(xy).astype(int)
-
             output[0, i:i+image.shape[0], j:j+image.shape[1]] += image * alpha.T
             output[1, i:i+image.shape[0], j:j+image.shape[1]] += alpha.T
         else:
             ST = skimage.transform.SimilarityTransform(translation=xy)
-
             tmp = np.array([skimage.transform.warp(image, inverse_map=ST.inverse,
                                                    output_shape=output_shape,
                                                    preserve_range=True, mode='reflect'),
@@ -892,14 +996,12 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
             tmp[0, :, :] *= tmp[1, :, :]
             output += tmp
 
-
     output = (output[0, :, :] / output[1, :, :])
 
     if clip:
         def edges(n):
             return np.r_[n[:4, :].flatten(), n[-4:, :].flatten(),
                          n[:, :4].flatten(), n[:, -4:].flatten()]
-
         while np.isnan(edges(output)).any():
             output = output[4:-4, 4:-4]
 

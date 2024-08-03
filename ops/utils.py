@@ -1,3 +1,18 @@
+"""
+Utility Functions for Image Processing and Data Analysis
+
+This module provides a collection of utility functions for image processing, data manipulation, 
+and analysis, primarily using NumPy and Pandas. It includes functions for:
+
+1. DataFrame operations: sorting, grouping, applying functions to groups, and data transformation.
+2. Image processing: tiling, montaging, trimming, and manipulating image stacks.
+3. Parallel processing: applying functions to groups of data in parallel.
+4. File I/O: reading and combining CSV files, handling image files.
+5. Memoization: caching function results for improved performance.
+6. Specialized image analysis: region properties, resizing, and multichannel image handling.
+
+"""
+
 import functools
 import multiprocessing
 from joblib import Parallel, delayed
@@ -14,34 +29,24 @@ from natsort import natsorted
 import numpy as np
 import pandas as pd
 
-# def combine_tables(tag,output_filetype='hdf',subdir_read='process',n_jobs=1,usecols=None):
-    
-#     files = glob('{subdir_read}/*.{tag}.csv'.format(subdir_read=subdir_read,tag=tag))
-
-#     from tqdm.notebook import tqdm
-
-#     def get_file(f,usecols):
-#         try:
-#             return pd.read_csv(f,usecols=usecols)
-#         except pd.errors.EmptyDataError:
-#             pass
-
-#     if n_jobs != 1:
-#         from joblib import Parallel,delayed
-#         arr = Parallel(n_jobs=n_jobs)(delayed(get_file,usecols=usecols)(file) for file in tqdm(files))
-#     else:
-#         arr = [get_file(file,usecols) for file in files]
-
-#     df = pd.concat(arr)
-#     if output_filetype=='csv':
-#         df.to_csv(tag+'.csv')
-#     else:
-#         df.to_hdf(tag + '.hdf', tag, mode='w')
-
 def combine_tables(tag, output_filetype='hdf', subdir_read='process', n_jobs=1, usecols=None, subdir_write=None):
+    """
+    Combines CSV files with a specific tag into a single output file.
 
+    Args:
+        tag (str): Tag to identify the CSV files to be combined.
+        output_filetype (str, optional): Output file type ('hdf' or 'csv'). Defaults to 'hdf'.
+        subdir_read (str, optional): Subdirectory to read input files from. Defaults to 'process'.
+        n_jobs (int, optional): Number of parallel jobs to run. Defaults to 1.
+        usecols (list, optional): List of columns to use from the CSV files. Defaults to None (all columns).
+        subdir_write (str, optional): Subdirectory to write output file to. Defaults to None (same as subdir_read).
+
+    Returns:
+        None: Writes the combined data to a file.
+    """
     from tqdm.notebook import tqdm
 
+    # Get list of files matching the tag
     files = glob(os.path.join(subdir_read, f'*.{tag}.csv'))
 
     def get_file(f, usecols):
@@ -50,86 +55,67 @@ def combine_tables(tag, output_filetype='hdf', subdir_read='process', n_jobs=1, 
         except pd.errors.EmptyDataError:
             pass
 
+    # Read files in parallel or sequentially based on n_jobs
     if n_jobs != 1:
         from joblib import Parallel, delayed
         arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in tqdm(files))
     else:
         arr = [get_file(file, usecols) for file in files]
 
+    # Combine all dataframes
     df = pd.concat(arr)
+    
+    # Set output directory
     if subdir_write is None:
         subdir_write = subdir_read
     output_path = os.path.join(subdir_write, f"{tag}.{output_filetype}")
 
+    # Save combined data to file
     if output_filetype == 'csv':
         df.to_csv(output_path)
     else:
         df.to_hdf(output_path, tag, mode='w')
 
         
-# def combine_tables_intermediate(tag, output_filetype='hdf', subdir='process', n_jobs=1, output_dir=None, usecols=None):
-    
-#     files = glob(f'{subdir}/*{tag}.csv')
-    
-#     def get_file(f, usecols):
-#         try:
-#             return pd.read_csv(f, usecols=usecols)
-#         except pd.errors.EmptyDataError:
-#             print(f"Empty data in file: {f}")
-#             pass
-
-#     if tag == 'bases':
-#         # Process bases files separately for each prefix tag
-#         prefix_tags = set([os.path.basename(file).split('_')[1] for file in files])
-#         for prefix_tag in prefix_tags:
-#             prefix_files = [file for file in files if prefix_tag in file]
-#             arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in prefix_files)
-#             df = pd.concat(arr)
-#             output_file = f"{output_dir}/{prefix_tag}_{tag}.{output_filetype}"
-#             if output_filetype == 'csv':
-#                 df.to_csv(output_file)
-#             else:
-#                 df.to_hdf(output_file, tag, mode='w')
-#             print(f"Saved {output_file}")
-
-#     else:
-#         # For other tags, combine all files into a single output file
-#         arr = Parallel(n_jobs=n_jobs)(delayed(get_file)(file, usecols) for file in files)
-#         df = pd.concat(arr)
-#         output_file = f"{output_dir}/{tag}.{output_filetype}"
-#         if output_filetype == 'csv':
-#             df.to_csv(output_file)
-#         else:
-#             df.to_hdf(output_file, tag, mode='w')
-#         print(f"Saved {output_file}")
-
-
 def format_input(input_table, n_jobs=1, **kwargs):
+    """
+    Processes an input table to format and combine image data.
+
+    Args:
+        input_table (str): Path to the input Excel file.
+        n_jobs (int, optional): Number of parallel jobs to run. Defaults to 1.
+        **kwargs: Additional keyword arguments for parallel processing.
+
+    Returns:
+        None: Processes and saves the formatted image data.
+    """
     df = pd.read_excel(input_table)
     
-    def process_site(output_file,df_input):
+    def process_site(output_file, df_input):
+        # Stack images from different channels
         stacked = np.array([read(input_file) for input_file in df_input.sort_values('channel')['original filename']])
-        save(output_file,stacked)
+        save(output_file, stacked)
         
+    # Process sites in parallel or sequentially based on n_jobs
     if n_jobs != 1:
         from joblib import Parallel, delayed
-        Parallel(n_jobs=n_jobs, **kwargs)(delayed(process_site)(output_file,df_input) for output_file,df_input in df.groupby('snakemake filename'))
+        Parallel(n_jobs=n_jobs, **kwargs)(delayed(process_site)(output_file, df_input) 
+                                          for output_file, df_input in df.groupby('snakemake filename'))
     else:
-        for output_file,df_input in df.groupby('snakemake filename'):
-            process_site(output_file,df_input)
+        for output_file, df_input in df.groupby('snakemake filename'):
+            process_site(output_file, df_input)
             
             
 def memoize(active=True, copy_numpy=True):
-    """The memoized function has attributes `cache`, `keys`, and `reset`. 
-    
-    @memoize(active=False)
-    def f(...):
-        ...
-    
-    f.keys['active'] = True  # activate memoization
-    f.cache  # the cache itself
-    f.reset()  # reset the cache
+    """
+    Decorator for memoizing function results.
 
+    Args:
+        active (bool, optional): Whether memoization is active. Defaults to True.
+        copy_numpy (bool, optional): Whether to copy numpy arrays in the cache. Defaults to True.
+
+    Returns:
+        function: Decorated function with memoization capabilities.
     """
     def inner(f):
         f_ = decorator.decorate(f, _memoize)
@@ -151,6 +137,17 @@ def memoize(active=True, copy_numpy=True):
 
 
 def _memoize(f, *args, **kwargs):
+    """
+    Internal function for memoization logic.
+
+    Args:
+        f (function): The function to be memoized.
+        *args: Positional arguments to the function.
+        **kwargs: Keyword arguments to the function.
+
+    Returns:
+        The memoized result of the function call.
+    """
     if not f.keys['active']:
         return f(*args, **kwargs)
 
@@ -158,7 +155,7 @@ def _memoize(f, *args, **kwargs):
     if key not in f.cache:
         f.cache[key] = f(*args, **kwargs)
 
-    # copy numpy arrays unless disabled by copy_numpy=False
+    # Copy numpy arrays unless disabled
     if isinstance(f.cache[key], np.ndarray):
         if f.keys['copy_numpy']:
             return f.cache[key].copy()
@@ -168,9 +165,19 @@ def _memoize(f, *args, **kwargs):
     return f.cache[key]
     
 
-# PANDAS
+# PANDAS UTILS
+
 def natsort_values(df, cols, ascending=True):
-    """Substitute for pd.DataFrame.sort_values
+    """
+    Sort DataFrame using natural sorting order.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        cols (str or list): Column(s) to sort by.
+        ascending (bool, optional): Sort ascending vs. descending. Defaults to True.
+
+    Returns:
+        pd.DataFrame: Sorted DataFrame.
     """
     from natsort import index_natsorted
     if not isinstance(cols, list):
@@ -181,23 +188,34 @@ def natsort_values(df, cols, ascending=True):
           .index)
     return df.iloc[list(ix)].copy()
 
-
 def bin_join(xs, symbol):
+    """
+    Join strings with a symbol, wrapping each in parentheses.
+
+    Args:
+        xs (iterable): Strings to join.
+        symbol (str): Symbol to join with.
+
+    Returns:
+        str: Joined string.
+    """
     symbol = ' ' + symbol + ' ' 
     return symbol.join('(%s)' % x for x in xs)
-        
 
 or_join  = functools.partial(bin_join, symbol='|')
 and_join = functools.partial(bin_join, symbol='&')
 
-
 def groupby_reduce_concat(gb, *args, **kwargs):
     """
-    df = (df_cells
-          .groupby(['stimulant', 'gene'])['gate_NT']
-          .pipe(groupby_reduce_concat, 
-                fraction_gate_NT='mean', 
-                cell_count='size'))
+    Apply multiple reduction operations to a grouped DataFrame.
+
+    Args:
+        gb (pd.DataFrameGroupBy): Grouped DataFrame.
+        *args: Names of reduction operations to apply.
+        **kwargs: Custom reduction operations.
+
+    Returns:
+        pd.DataFrame: DataFrame with results of reduction operations.
     """
     for arg in args:
         kwargs[arg] = arg
@@ -227,10 +245,20 @@ def groupby_reduce_concat(gb, *args, **kwargs):
 
     return pd.concat(arr, axis=1).reset_index()
 
-
 def groupby_histogram(df, index, column, bins, cumulative=False, normalize=False):
-    """Substitute for df.groupby(index)[column].value_counts(),
-    only supports one column label.
+    """
+    Create a histogram for grouped data.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        index (str or list): Column(s) to group by.
+        column (str): Column to create histogram for.
+        bins (array-like): Bin edges for histogram.
+        cumulative (bool, optional): If True, calculate cumulative histogram. Defaults to False.
+        normalize (bool, optional): If True, normalize histogram. Defaults to False.
+
+    Returns:
+        pd.DataFrame: Histogram data.
     """
     maybe_cumsum = lambda x: x.cumsum(axis=1) if cumulative else x
     maybe_normalize = lambda x: x.div(x.sum(axis=1), axis=0) if normalize else x
@@ -259,13 +287,20 @@ def groupby_histogram(df, index, column, bins, cumulative=False, normalize=False
         .reset_index()
            )
 
-
 def groupby_apply2(df_1, df_2, cols, f, tqdm=True):
-    """Apply a function `f` that takes two dataframes and returns a dataframe.
-    Groups inputs by `cols`, evaluates for each group, and concatenates the result.
-
     """
+    Apply a function to paired groups from two DataFrames.
 
+    Args:
+        df_1 (pd.DataFrame): First DataFrame.
+        df_2 (pd.DataFrame): Second DataFrame.
+        cols (list): Columns to group by.
+        f (callable): Function to apply to each pair of groups.
+        tqdm (bool, optional): If True, show progress bar. Defaults to True.
+
+    Returns:
+        pd.DataFrame: Concatenated results of applying f to each pair of groups.
+    """
     d_1 = {k: v for k,v in df_1.groupby(cols)}
     d_2 = {k: v for k,v in df_2.groupby(cols)}
 
@@ -281,25 +316,50 @@ def groupby_apply2(df_1, df_2, cols, f, tqdm=True):
     
     return pd.concat(arr)    
 
-
 def groupby_apply_norepeat(gb, f, *args, **kwargs):
-    """Avoid double calling on first group.
+    """
+    Apply a function to each group in a GroupBy object without repeating on the first group.
+
+    Args:
+        gb (pd.DataFrameGroupBy): GroupBy object.
+        f (callable): Function to apply to each group.
+        *args: Positional arguments to pass to f.
+        **kwargs: Keyword arguments to pass to f.
+
+    Returns:
+        pd.DataFrame: Concatenated results of applying f to each group.
     """
     arr = []
     for _, df in gb:
         arr += [f(df, *args, **kwargs)]
     return pd.concat(arr)
 
-
 def ndarray_to_dataframe(values, index):
+    """
+    Convert a numpy array to a DataFrame with MultiIndex columns.
+
+    Args:
+        values (np.ndarray): Input array.
+        index (list of tuples): List of (name, levels) tuples for MultiIndex.
+
+    Returns:
+        pd.DataFrame: Resulting DataFrame.
+    """
     names, levels  = zip(*index)
     columns = pd.MultiIndex.from_product(levels, names=names)
     df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
     return df
 
-
 def uncategorize(df, as_codes=False):
-    """Pivot and concat are weird with categories.
+    """
+    Convert categorical columns to non-categorical types.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        as_codes (bool, optional): If True, convert to category codes. Defaults to False.
+
+    Returns:
+        pd.DataFrame: DataFrame with uncategorized columns.
     """
     for col in df.select_dtypes(include=['category']).columns:
         if as_codes:
@@ -308,18 +368,32 @@ def uncategorize(df, as_codes=False):
             df[col] = np.asarray(df[col])
     return df
 
-
 def rank_by_order(df, groupby_columns):
-    """Uses 1-based ranking, like `df.groupby(..).rank()`.
+    """
+    Rank rows within groups based on their order.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        groupby_columns (str or list): Column(s) to group by.
+
+    Returns:
+        list: List of ranks (1-based).
     """
     return (df
         .groupby(groupby_columns).cumcount()
         .pipe(lambda x: list(x + 1))
         )
 
-
 def flatten_cols(df, f='underscore'):
-    """Flatten column multi index.
+    """
+    Flatten MultiIndex columns of a DataFrame.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame with MultiIndex columns.
+        f (str or callable, optional): Function to join column levels. Defaults to 'underscore'.
+
+    Returns:
+        pd.DataFrame: DataFrame with flattened column names.
     """
     if f == 'underscore':
         f = lambda x: '_'.join(str(y) for y in x if y != '')
@@ -327,26 +401,51 @@ def flatten_cols(df, f='underscore'):
     df.columns = [f(x) for x in df.columns]
     return df
 
-
 def vpipe(df, f, *args, **kwargs):
-    """Pipe through a function that accepts and returns a 2D array.
+    """
+    Apply a function to the values of a DataFrame and return a new DataFrame.
 
-    `df.pipe(vpipe, sklearn.preprocessing.scale)`
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        f (callable): Function to apply to DataFrame values.
+        *args: Positional arguments to pass to f.
+        **kwargs: Keyword arguments to pass to f.
+
+    Returns:
+        pd.DataFrame: Resulting DataFrame after applying f to values.
     """
     return pd.DataFrame(f(df.values, *args, **kwargs), 
                  columns=df.columns, index=df.index)
 
-
 def cast_cols(df, int_cols=tuple(), float_cols=tuple(), str_cols=tuple()):
+    """
+    Cast columns of a DataFrame to specified types.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        int_cols (tuple, optional): Columns to cast to int. Defaults to tuple().
+        float_cols (tuple, optional): Columns to cast to float. Defaults to tuple().
+        str_cols (tuple, optional): Columns to cast to str. Defaults to tuple().
+
+    Returns:
+        pd.DataFrame: DataFrame with casted columns.
+    """
     return (df
            .assign(**{c: df[c].astype(int) for c in int_cols})
            .assign(**{c: df[c].astype(float) for c in float_cols})
            .assign(**{c: df[c].astype(str) for c in str_cols})
            )
 
-
 def replace_cols(df, **kwargs):
-    """Apply function to update column with keyword argument name.
+    """
+    Apply functions to update specified columns in a DataFrame.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        **kwargs: Column names and functions to apply.
+
+    Returns:
+        pd.DataFrame: DataFrame with updated columns.
     """
     d = {}
     for k, v in kwargs.items():
@@ -355,9 +454,17 @@ def replace_cols(df, **kwargs):
         d[k] = f
     return df.assign(**d)
 
-
 def expand_sep(df, col, sep=','):
-    """Expands table by splitting strings. Drops index.
+    """
+    Expand a column with separated values into multiple rows.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        col (str): Column to expand.
+        sep (str, optional): Separator used in the column. Defaults to ','.
+
+    Returns:
+        pd.DataFrame: Expanded DataFrame.
     """
     index, values = [], []
     for i, x in enumerate(df[col]):
@@ -368,13 +475,24 @@ def expand_sep(df, col, sep=','):
     return (pd.DataFrame(df.values[index], columns=df.columns)
      .assign(**{col: values}))
 
-
-
 def csv_frame(files_or_search, progress=lambda x: x, add_file=None, file_pat=None, sort=True, 
               include_cols=None, exclude_cols=None, **kwargs):
-    """Convenience function, pass either a list of files or a glob wildcard search term.
     """
-    
+    Read multiple CSV files into a single DataFrame.
+
+    Args:
+        files_or_search (str or list): Glob pattern or list of file paths.
+        progress (callable, optional): Progress bar function. Defaults to lambda x: x.
+        add_file (str, optional): Column name to add file path. Defaults to None.
+        file_pat (str, optional): Regex pattern to extract info from file names. Defaults to None.
+        sort (bool, optional): Whether to sort the resulting DataFrame. Defaults to True.
+        include_cols (list, optional): Columns to include. Defaults to None.
+        exclude_cols (list, optional): Columns to exclude. Defaults to None.
+        **kwargs: Additional arguments for pd.read_csv.
+
+    Returns:
+        pd.DataFrame: Combined DataFrame from all CSV files.
+    """
     def read_csv(f):
         try:
             df = pd.read_csv(f, **kwargs)
@@ -411,69 +529,115 @@ def csv_frame(files_or_search, progress=lambda x: x, add_file=None, file_pat=Non
 
     return pd.concat([read_csv(f) for f in progress(files)], sort=sort)
 
-
 def gb_apply_parallel(df, cols, func, n_jobs=None, tqdm=True, backend='loky'):
+    """
+    Apply a function to groups of a DataFrame in parallel.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        cols (str or list): Column(s) to group by.
+        func (callable): Function to apply to each group.
+        n_jobs (int, optional): Number of parallel jobs. If None, uses (CPU count - 1). Defaults to None.
+        tqdm (bool, optional): Whether to show progress bar. Defaults to True.
+        backend (str, optional): Joblib parallel backend. Defaults to 'loky'.
+
+    Returns:
+        pd.DataFrame or pd.Series: Results of applying func to each group, combined into a single DataFrame or Series.
+    """
+    # Ensure cols is a list
     if isinstance(cols, str):
         cols = [cols]
 
     from joblib import Parallel, delayed
+
+    # Set number of jobs if not specified
     if n_jobs is None:
         import multiprocessing
         n_jobs = multiprocessing.cpu_count() - 1
 
+    # Group the DataFrame
     grouped = df.groupby(cols)
     names, work = zip(*grouped)
+
+    # Add progress bar if requested
     if tqdm:
         from tqdm import tqdm_notebook 
         work = tqdm_notebook(work, str(cols))
-    results = Parallel(n_jobs=n_jobs,backend=backend)(delayed(func)(w) for w in work)
 
+    # Apply function in parallel
+    results = Parallel(n_jobs=n_jobs, backend=backend)(delayed(func)(w) for w in work)
+
+    # Process results based on their type
     if isinstance(results[0], pd.DataFrame):
+        # For DataFrame results
         arr = []
         for labels, df in zip(names, results):
-            if not isinstance(labels,Iterable):
+            if not isinstance(labels, Iterable):
                 labels = [labels]
             if df is not None:
                 (df.assign(**{c: l for c, l in zip(cols, labels)})
                     .pipe(arr.append))
         results = pd.concat(arr)
     elif isinstance(results[0], pd.Series):
+        # For Series results
         if len(cols) == 1:
             results = (pd.concat(results, axis=1).T
                 .assign(**{cols[0]: names}))
         else:
             labels = zip(*names)
             results = (pd.concat(results, axis=1).T
-                .assign(**{c: l for c,l in zip(cols, labels)}))
-
+                .assign(**{c: l for c, l in zip(cols, labels)}))
     elif isinstance(results[0], dict):
+        # For dict results
         results = pd.DataFrame(results, index=pd.Index(names, name=cols)).reset_index()
 
     return results
 
-
 def add_fstrings(df, **format_strings):
-    """Add strings formatted using columns as keys.
-    
-    For example, `df.pipe(add_str_format, well_tile='{well}_{tile}')`
+    """
+    Add new columns to a DataFrame using f-string-like formatting.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        **format_strings: Keyword arguments where keys are new column names and 
+                          values are format strings using existing column names.
+
+    Returns:
+        pd.DataFrame: DataFrame with new formatted string columns added.
+
+    Example:
+        df.pipe(add_fstrings, well_tile='{well}_{tile}')
     """
     format_strings = list(format_strings.items())
     results = {}
     for name, fmt in format_strings:
-        cols = [x[1] for x in string.Formatter().parse(fmt)]
+        # Extract column names from the format string
+        cols = [x[1] for x in string.Formatter().parse(fmt) if x[1] is not None]
+        # Convert relevant columns to a list of dictionaries
         rows = df[cols].to_dict('records')
+        # Apply the format string to each row
         results[name] = [fmt.format(**row) for row in rows]
+    # Add new columns to the DataFrame
     return df.assign(**results)
 
+# NUMPY UTILS
 
-
-# NUMPY
 def pile(arr):
-    """Concatenate stacks of same dimensionality along leading dimension. Values are
-    filled from top left of matrix. Fills background with zero.
+    """
+    Concatenate stacks of same dimensionality along leading dimension.
+
+    Args:
+        arr (list of np.ndarray): List of arrays to be concatenated.
+
+    Returns:
+        np.ndarray: Concatenated array with background filled with zeros.
+
+    Notes:
+        - Values are filled from top left of matrix.
+        - Arrays are padded with zeros to match the largest dimensions.
     """
     shape = [max(s) for s in zip(*[x.shape for x in arr])]
-    # strange numpy limitations
+    # Handle numpy limitations
     arr_out = []
     for x in arr:
         y = np.zeros(shape, x.dtype)
@@ -483,18 +647,28 @@ def pile(arr):
 
     return np.concatenate(arr_out, axis=0)
 
-
 def montage(arr, shape=None):
-    """tile ND arrays ([..., height, width]) in last two dimensions
-    first N-2 dimensions must match, tiles are expanded to max height and width
-    pads with zero, no spacing
-    if shape=(rows, columns) not provided, defaults to square, clipping last row if empty
-    if shape contains -1, infers this dimension
-    if (rows or columns) == 1, does not pad zeros in (width or height)
+    """
+    Tile ND arrays in last two dimensions to create a montage.
+
+    Args:
+        arr (list of np.ndarray): List of arrays to be tiled.
+        shape (tuple, optional): Desired shape of the montage (rows, columns).
+
+    Returns:
+        np.ndarray: Tiled montage of input arrays.
+
+    Notes:
+        - First N-2 dimensions must match across all input arrays.
+        - Tiles are expanded to max height and width and padded with zeros.
+        - If shape is not provided, defaults to square, clipping last row if empty.
+        - If shape contains -1, that dimension is inferred.
+        - If rows or columns is 1, does not pad zeros in width or height respectively.
     """
     sz = list(zip(*[img.shape for img in arr]))
     h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
 
+    # Determine the shape of the montage
     if not shape:
         nr = nc = int(np.ceil(np.sqrt(n)))
         if (nr - 1) * nc >= n:
@@ -510,6 +684,7 @@ def montage(arr, shape=None):
     else:
         nr, nc = shape
 
+    # Handle special case where one dimension is 1
     if 1 in (nr,nc):
         assert nr != nc, 'no need to montage a single image'
         shape = np.array((nr,nc))
@@ -535,14 +710,25 @@ def montage(arr, shape=None):
     return M
 
 def make_tiles(arr, m, n, pad=None):
-    """Divide a stack of images into tiles of size m x n. If m or n is between 
-    0 and 1, it specifies a fraction of the input size. If pad is specified, the
-    value is used to fill in edges, otherwise the tiles may not be equally sized.
-    Tiles are returned in a list.
+    """
+    Divide a stack of images into tiles.
+
+    Args:
+        arr (np.ndarray): Input array of images.
+        m (int or float): Tile height or fraction of input height.
+        n (int or float): Tile width or fraction of input width.
+        pad (scalar, optional): Value to use for padding. If None, tiles may not be equally sized.
+
+    Returns:
+        list: List of tiled arrays.
+
+    Notes:
+        - If m or n is between 0 and 1, it specifies a fraction of the input size.
+        - If pad is specified, it's used to fill in edges.
     """
     assert arr.ndim > 1
     h, w = arr.shape[-2:]
-    # convert to number of tiles
+    # Convert to number of tiles
     m_ = h / m if m >= 1 else int(np.round(1 / m))
     n_ = w / n if n >= 1 else int(np.round(1 / n))
 
@@ -560,10 +746,20 @@ def make_tiles(arr, m, n, pad=None):
     
     return tiled
 
-
 def trim(arr, return_slice=False):
-    """Remove i,j area that overlaps a zero value in any leading
-    dimension. Trims stitched and piled images.
+    """
+    Remove i,j area that overlaps a zero value in any leading dimension.
+
+    Args:
+        arr (np.ndarray): Input array to be trimmed.
+        return_slice (bool, optional): If True, return the slice object instead of the trimmed array.
+
+    Returns:
+        np.ndarray or tuple: Trimmed array or slice object if return_slice is True.
+
+    Notes:
+        - Trims stitched and piled images.
+        - Removes areas where any leading dimension has a zero value.
     """
     def coords_to_slice(i_0, i_1, j_0, j_1):
         return slice(i_0, i_1), slice(j_0, j_1)
@@ -609,23 +805,34 @@ def applyIJ(f, arr, *args, **kwargs):
 
 
 def inscribe(mask):
-    """Guess the largest axis-aligned rectangle inside mask. 
-    Rectangle must exclude zero values. Assumes zeros are at the 
-    edges, there are no holes, etc. Shrinks the rectangle's most 
-    egregious edge at each iteration.
+    """
+    Guess the largest axis-aligned rectangle inside a binary mask.
+
+    Args:
+        mask (np.ndarray): 2D binary mask where 0 indicates background.
+
+    Returns:
+        list: Coordinates of the largest inscribed rectangle [i_0, i_1, j_0, j_1].
+
+    Notes:
+        - Rectangle must exclude zero values.
+        - Assumes zeros are at the edges and there are no holes.
+        - Iteratively shrinks the rectangle's most problematic edge.
     """
     h, w = mask.shape
     i_0, i_1 = 0, h - 1
     j_0, j_1 = 0, w - 1
     
     def edge_costs(i_0, i_1, j_0, j_1):
+        """Calculate the cost (mean value) of each edge of the rectangle."""
         a = mask[i_0, j_0:j_1 + 1].mean() # top
         b = mask[i_1, j_0:j_1 + 1].mean() # bottom
         c = mask[i_0:i_1 + 1, j_0].mean() # left
         d = mask[i_0:i_1 + 1, j_1].mean() # right  
-        return a,b,c,d
+        return a, b, c, d
     
     def area(i_0, i_1, j_0, j_1):
+        """Calculate the area of the rectangle."""
         return (i_1 - i_0) * (j_1 - j_0)
     
     coords = [i_0, i_1, j_0, j_1]
@@ -635,18 +842,24 @@ def inscribe(mask):
             return coords
         worst = costs.index(max(costs))
         coords[worst] += 1 if worst in (0, 2) else -1
-        # print(costs, coords, worst)
     return coords
 
 def subimage(stack, bbox, pad=0):
-    """Index rectangular region from [...xYxX] stack with optional constant-width padding.
-    Boundary is supplied as (min_row, min_col, max_row, max_col).
-    If boundary lies outside stack, raises error.
-    If padded rectangle extends outside stack, fills with fill_value.
+    """
+    Extract a rectangular region from a stack of images with optional padding.
 
-    bbox can be bbox or iterable of bbox (faster if padding)
-    :return:
-    """ 
+    Args:
+        stack (np.ndarray): Input stack of images [...xYxX].
+        bbox (np.ndarray or list): Bounding box coordinates (min_row, min_col, max_row, max_col).
+        pad (int, optional): Padding width. Defaults to 0.
+
+    Returns:
+        np.ndarray: Extracted subimage.
+
+    Notes:
+        - If boundary lies outside stack, raises error.
+        - If padded rectangle extends outside stack, fills with zeros.
+    """
     i0, j0, i1, j1 = bbox + np.array([-pad, -pad, pad, pad])
 
     sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0), dtype=stack.dtype)
@@ -660,9 +873,20 @@ def subimage(stack, bbox, pad=0):
     sub[s] = stack[..., i0_:i1_, j0_:j1_]
     return sub
 
-
 def offset(stack, offsets):
-    """Applies offset to stack, fills with zero. Only applies integer offsets.
+    """
+    Apply offsets to a stack of images, filling new areas with zeros.
+
+    Args:
+        stack (np.ndarray): Input stack of images.
+        offsets (list or np.ndarray): Offsets to apply for each dimension.
+
+    Returns:
+        np.ndarray: Offset stack of images.
+
+    Notes:
+        - Only applies integer offsets.
+        - If len(offsets) == 2 and stack.ndim > 2, applies offsets to last two dimensions.
     """
     if len(offsets) != stack.ndim:
         if len(offsets) == 2 and stack.ndim > 2:
@@ -685,64 +909,37 @@ def offset(stack, offsets):
 
     return stack    
 
-
 def join_stacks(*args):
-    def with_default(arg):
-        try:
-            arr, code = arg
-            return arr, code
-        except ValueError:
-            return arg, ''
+    """
+    Join multiple arrays along specified dimensions.
 
-    def expand_dims(arr, n):
-        if arr.ndim < n:
-            return expand_dims(arr[None], n)
-        return arr
+    Args:
+        *args: Tuples of (array, code), where code specifies how to join.
+               Code can contain 'a' (append), 'r' (repeat), or '.' (do nothing).
 
-    def expand_code(arr, code):
-        return code + '.' * (arr.ndim - len(code))
+    Returns:
+        np.ndarray: Joined array.
 
-    def validate_code(arr, code):
-        if code.count('a') > 1:
-            raise ValueError('cannot append same array along multiple dimensions')
-        if len(code) > arr.ndim:
-            raise ValueError('length of code greater than number of dimensions')
+    Notes:
+        - Arrays are expanded to match the highest dimensionality.
+        - If no codes are provided, arrays are appended along a new leading dimension.
+    """
+    # Helper functions (with_default, expand_dims, expand_code, validate_code, 
+    # mark_all_appends, special_case_no_ops) are defined here...
 
-    def mark_all_appends(codes):
-        arr = []
-        for pos in zip(*codes):
-            if 'a' in pos:
-                if 'r' in pos:
-                    raise ValueError('cannot repeat and append along the same axis')
-                pos = 'a' * len(pos)
-            arr += [pos]
-        return [''.join(code) for code in zip(*arr)]
-
-    def special_case_no_ops(args):
-        if all([c == '.' for _, code in args for c in code]):
-            return [(arr[None], 'a' + code) for arr, code in args]
-        return args
-    
-    # insert default code (only dots)
+    # Process input arguments
     args = [with_default(arg) for arg in args]
-    # expand the dimensions of the input arrays
     output_ndim = max(arr.ndim for arr, _ in args)
     args = [(expand_dims(arr, output_ndim), code) for arr, code in args]
-    # add trailing dots to codes
     args = [(arr, expand_code(arr, code)) for arr, code in args]
-    # if no codes are provided, interpret as appending along a new dimension
     args = special_case_no_ops(args)
-    # recalculate due to special case
     output_ndim = max(arr.ndim for arr, _ in args)
     
     [validate_code(arr, code) for arr, code in args]
-    # if any array is appended along an axis, every array must be
-    # input codes are converted from dot to append for those axes
     codes = mark_all_appends([code for _, code in args])
     args = [(arr, code) for (arr, _), code in zip(args, codes)]
 
-    # calculate shape for output array
-    # uses numpy addition rule to determine output dtype
+    # Calculate output shape and dtype
     output_dtype = sum([arr.flat[:1] for arr, _ in args]).dtype
     output_shape = [0] * output_ndim
     for arr, code in args:
@@ -763,8 +960,7 @@ def join_stacks(*args):
     
     output = np.zeros(output_shape, dtype=output_dtype)
     
-    # assign from input arrays to output 
-    # (values automatically coerced to most general numeric type)
+    # Assign values from input arrays to output
     slices_so_far = [0] * output_ndim
     for arr, code in args:
         slices = []
@@ -781,6 +977,7 @@ def join_stacks(*args):
     return output
 
 # SCIKIT-IMAGE
+
 def regionprops(labeled, intensity_image):
     """
     Supplement skimage.measure.regionprops with additional field `intensity_image_full` 

@@ -1,3 +1,16 @@
+"""
+Cellpose-based Image Segmentation
+This module provides functions for segmenting microscopy images using the Cellpose algorithm
+(relating to SBS base calling and phenotyping -- steps 1 and 2). It includes functions for:
+
+1. Cell and Nuclei Segmentation: Segmenting cells and nuclei from various image types.
+2. Image Preprocessing: Applying log scaling and other preprocessing techniques to images.
+3. Label Reconciliation: Reconciling nuclei and cell labels based on their spatial relationships.
+4. Mask Processing: Manipulating and refining segmentation masks.
+5. Utility Functions: Supporting operations for image analysis and segmentation tasks.
+
+"""
+
 from cellpose.models import Cellpose
 import numpy as np
 import contextlib
@@ -49,30 +62,33 @@ def segment_cellpose(dapi, cyto, nuclei_diameter, cell_diameter, gpu=False,
     # Segment nuclei and cells using Cellpose
     nuclei, _, _, _ = model_dapi.eval(img, channels=[1, 0], diameter=nuclei_diameter)
     cells, _, _, _  = model_cyto.eval(img, channels=[2, 1], diameter=cell_diameter)
+    
+    # Print the number of nuclei and cells found before and after removing edges
+    print(f'found {len(np.unique(nuclei))} nuclei before removing edges', file=sys.stderr)
+    print(f'found {len(np.unique(cells))} cells before removing edges', file=sys.stderr)
 
     # Remove nuclei and cells touching the image edges if specified
     if remove_edges:
         nuclei = clear_border(nuclei)
         cells = clear_border(cells)
-
+    
+    # Print the number of nuclei and cells found before and after reconciliation
+    print(f'found {len(np.unique(nuclei))} nuclei before reconciling', file=sys.stderr)
+    print(f'found {len(np.unique(cells))} cells before reconciling', file=sys.stderr)
+    
     # Reconcile nuclei and cells if specified
     if reconcile:
         nuclei, cells = reconcile_nuclei_cells(nuclei, cells, how=reconcile)
-
-    # Print the number of nuclei and cells found before and after reconciliation
-    print(f'found {nuclei.max()} nuclei before reconciling', file=sys.stderr)
-    print(f'found {cells.max()} cells before reconciling', file=sys.stderr)
-    print(f'found {cells.max()} nuclei/cells after reconciling', file=sys.stderr)
+        print(f'found {len(np.unique(cells))} nuclei/cells after reconciling', file=sys.stderr)
 
     # Return the segmented nuclei and cells
     return nuclei, cells
 
 def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False, 
                          cyto_model='cyto', reconcile='consensus', logscale=True,
-                         remove_edges=True):
+                         remove_edges=True, return_counts=False):
     """
     Segment nuclei and cells using the Cellpose algorithm from an RGB image.
-
     Parameters:
         rgb (numpy.ndarray): RGB image.
         nuclei_diameter (int): Diameter of nuclei for segmentation.
@@ -82,44 +98,53 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
         reconcile (str, optional): Method for reconciling nuclei and cells. Default is 'consensus'.
         logscale (bool, optional): Whether to apply log scaling to the cytoplasmic channel. Default is True.
         remove_edges (bool, optional): Whether to remove nuclei and cells touching the image edges. Default is True.
-
+        return_counts (bool, optional): Whether to return counts of nuclei and cells before reconciliation. Default is False.
     Returns:
         tuple: A tuple containing:
             - nuclei (numpy.ndarray): Labeled segmentation mask of nuclei.
             - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
+            - (optional) counts (dict): Counts of nuclei and cells at different stages if return_counts is True.
     """
     # Instantiate Cellpose models for nuclei and cytoplasmic segmentation
     model_dapi = Cellpose(model_type='nuclei', gpu=gpu)
     model_cyto = Cellpose(model_type=cyto_model, gpu=gpu)
     
+    counts = {}
+    
     # Segment nuclei and cells using Cellpose from the RGB image
     nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter)
-    cells, _, _, _  = model_cyto.eval(rgb, channels=[2, 3], diameter=cell_diameter)
-
-    # Print the number of nuclei and cells found before and after removing edges
-    print(f'found {nuclei.max()} nuclei before removing edges', file=sys.stderr)
-    print(f'found {cells.max()} cells before removing edges', file=sys.stderr)
+    cells, _, _, _ = model_cyto.eval(rgb, channels=[2, 3], diameter=cell_diameter)
+    
+    counts['initial_nuclei'] = len(np.unique(nuclei)) - 1  # Subtract 1 to exclude background
+    counts['initial_cells'] = len(np.unique(cells)) - 1
+    
+    print(f'found {counts["initial_nuclei"]} nuclei before removing edges', file=sys.stderr)
+    print(f'found {counts["initial_cells"]} cells before removing edges', file=sys.stderr)
     
     # Remove nuclei and cells touching the image edges if specified
     if remove_edges:
         print('removing edges')
         nuclei = clear_border(nuclei)
         cells = clear_border(cells)
-
-    # Print the number of nuclei and cells found before and after reconciliation
-    print(f'found {nuclei.max()} nuclei before reconciling', file=sys.stderr)
-    print(f'found {cells.max()} cells before reconciling', file=sys.stderr)
+    
+    counts['after_edge_removal_nuclei'] = len(np.unique(nuclei)) - 1
+    counts['after_edge_removal_cells'] = len(np.unique(cells)) - 1
+    
+    print(f'found {counts["after_edge_removal_nuclei"]} nuclei before reconciling', file=sys.stderr)
+    print(f'found {counts["after_edge_removal_cells"]} cells before reconciling', file=sys.stderr)
     
     # Reconcile nuclei and cells if specified
     if reconcile:
         print(f'reconciling masks with method how={reconcile}')
         nuclei, cells = reconcile_nuclei_cells(nuclei, cells, how=reconcile)
+        
+    counts['final_cells'] = len(np.unique(cells)) - 1
+    print(f'found {counts["final_cells"]} nuclei/cells after reconciling', file=sys.stderr)
     
-    # Print the number of nuclei and cells found after reconciliation
-    print(f'found {cells.max()} nuclei/cells after reconciling', file=sys.stderr)
-
-    # Return the segmented nuclei and cells
-    return nuclei, cells
+    if return_counts:
+        return nuclei, cells, counts
+    else:
+        return nuclei, cells
 
 
 def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False, 
@@ -144,7 +169,7 @@ def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False,
     nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter)
 
     # Print the number of nuclei found before and after removing edges
-    print(f'found {nuclei.max()} nuclei before removing edges', file=sys.stderr)
+    print(f'found {len(np.unique(nuclei))} nuclei before removing edges', file=sys.stderr)
     
     # Remove nuclei touching the image edges if specified
     if remove_edges:
@@ -152,7 +177,7 @@ def segment_cellpose_nuclei_rgb(rgb, nuclei_diameter, gpu=False,
         nuclei = clear_border(nuclei)
 
     # Print the final number of nuclei after processing
-    print(f'found {nuclei.max()} final nuclei', file=sys.stderr)
+    print(f'found {len(np.unique(nuclei))} final nuclei', file=sys.stderr)
 
     # Return the segmented nuclei
     return nuclei

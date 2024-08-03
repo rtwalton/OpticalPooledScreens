@@ -1,3 +1,18 @@
+"""
+Image Analysis Utilities
+
+This module provides a range of utilities for analyzing image regions using properties from the 
+`skimage.measure.regionprops` object (relating to phenotyping -- step 2).
+It includes functions for:
+
+1. Correlating Channels: Computing cross-correlation between different channels.
+2. Masked Intensity Extraction: Extracting intensity images from masked regions for specific channels.
+3. Counting Labels: Counting unique non-zero labels in labeled segmentation masks.
+4. Feature Extraction: Extracting various features such as intensity statistics, geometry properties, etc.
+
+"""
+
+
 import numpy as np
 import ops.utils
 

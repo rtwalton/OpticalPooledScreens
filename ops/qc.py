@@ -127,7 +127,7 @@ def plot_count_heatmap(df, tile='tile', shape='square', plate='6W', return_summa
 
 
 def plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one', mapping_strategy='barcodes', shape='square', plate='6W',
-    return_summary=False, **kwargs):
+                              return_plot=True, return_summary=False, **kwargs):
     """Plot the mapping rate of cells by well and tile in a convenient plate layout.
 
     Parameters
@@ -153,7 +153,10 @@ def plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one',
 
     plate : {'6W','24W','96W'}
         Plate type for plot_plate_heatmap
-
+ 
+    return_plot : boolean, default True
+        If true, returns df_summary
+    
     return_summary : boolean, default False
         If true, returns df_summary
 
@@ -210,12 +213,14 @@ def plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one',
                   .drop(columns='mapped')
                  )
 
-    # Plot heatmap
-    axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
-
-    if return_summary:
-        return df_summary,axes
-    return axes
+    if return_summary and return_plot:
+        return df_summary, axes
+    elif return_summary:
+        return df_summary
+    elif return_plot:
+        return axes
+    else:
+        return None
 
 def plot_mapping_vs_threshold(df_reads, barcodes, threshold_var='peak', ax=None, **kwargs):
     """
