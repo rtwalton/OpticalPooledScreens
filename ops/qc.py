@@ -2,59 +2,74 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib.ticker import ScalarFormatter
+import matplotlib.ticker as ticker
+import seaborn as sns
 
-def plot_reads_per_cell_histogram(df, x_cutoff=100):
+def plot_reads_per_cell_histogram(df, x_cutoff=40):
     """
     Plot a histogram of the number of reads per cell.
-
+    
     Parameters
     ----------
     df : pandas DataFrame
         DataFrame containing the data with columns including 'barcode_count' representing the number of reads per cell.
     x_cutoff : int, optional
-        Cutoff value for the x-axis. Default is 100.
-
+        Cutoff value for the x-axis. Default is 20.
+    bins : int, optional
+        Number of bins for the histogram. Default is 40.
+    
     Returns
     -------
     outliers : pandas Series
         Series containing outlier values exceeding the x_cutoff.
     """
-    # Create a new figure with a specified size
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 7))
+    sns.set_style("white")
+    
+    # Create bins from 0 to x_cutoff (inclusive)
+    bins = range(x_cutoff + 1)
     
     # Plot the histogram
-    plt.hist(df['barcode_count'], bins=150, alpha=0.7)
+    sns.histplot(data=df, x='barcode_count', bins=bins, color='skyblue', edgecolor='black')
     
     # Set title and axis labels
-    plt.title("Histogram of Barcode Count")
-    plt.xlabel("Number of ISS reads per cell")
-    plt.ylabel("Number of cells")
+    plt.title("Histogram of Barcode Count", fontsize=16, fontweight='bold')
+    plt.xlabel("Number of ISS reads per cell", fontsize=12)
+    plt.ylabel("Number of cells", fontsize=12)
     
     # Find outlier values
     outliers = df[df['barcode_count'] > x_cutoff]['barcode_count']
     
-    # Restrict x-axis to stop at x_cutoff
-    plt.xlim(right=x_cutoff)
+    # Restrict x-axis to stop at x_cutoff and set integer ticks
+    plt.xlim(0, x_cutoff)
+    plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
     
-    # Set y-axis ticks in scientific notation
+    # Format y-axis to use scientific notation
+    plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
     plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-    plt.gca().yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
     
-    # Display the plot
+    # Remove top and right spines
+    sns.despine()
+    
+    # Adjust layout and display the plot
+    plt.tight_layout()
     plt.show()
     
     return outliers
 
-def plot_gene_symbol_histogram(df):
+def plot_gene_symbol_histogram(df, x_cutoff=40):
     """
     Plot a histogram of the number of counts of each unique gene_symbol_0.
-
+    
     Parameters
     ----------
     df : pandas DataFrame
         DataFrame containing the data with a column 'gene_symbol_0'.
-
+    x_cutoff : int, optional
+        Cutoff value for the x-axis. Default is 40.
+    bins : int, optional
+        Number of bins for the histogram. Default is 40.
+    
     Returns
     -------
     None
@@ -62,165 +77,46 @@ def plot_gene_symbol_histogram(df):
     # Count occurrences of each unique gene_symbol_0
     gene_symbol_counts = df['gene_symbol_0'].value_counts()
     
+    print(gene_symbol_counts)    
+    
+    plt.figure(figsize=(12, 7))
+    sns.set_style("white")
+
+    # Set bin number
+    if x_cutoff < 100:
+        num_bins=x_cutoff
+    else:
+        num_bins=100
+        
+    # Create 100 evenly spaced bins from 0 to x_cutoff
+    bins = np.linspace(0, x_cutoff, num_bins+1)  # 101 edges to create 100 bins
+        
     # Plot the histogram
-    plt.figure(figsize=(10, 6))
-    plt.hist(gene_symbol_counts, bins=100, alpha=0.7)
+    sns.histplot(data=gene_symbol_counts, bins=bins, color='lightgreen', edgecolor='black')
     
     # Set title and axis labels
-    plt.title("Histogram of Gene Symbol Counts")
-    plt.xlabel("Number of cells per mapped gene")
-    plt.ylabel("Number of mapped genes")
+    plt.title("Histogram of Gene Symbol Counts", fontsize=16, fontweight='bold')
+    plt.xlabel("Number of cells per mapped gene", fontsize=12)
+    plt.ylabel("Number of mapped genes", fontsize=12)
     
-    # Show the plot
+    outliers = gene_symbol_counts[gene_symbol_counts > x_cutoff]
+    
+    # Restrict x-axis to stop at x_cutoff and set integer ticks
+    plt.xlim(0, x_cutoff)
+    plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    
+    # Format y-axis to use scientific notation
+    plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    
+    # Remove top and right spines
+    sns.despine()
+    
+    # Adjust layout and display the plot
+    plt.tight_layout()
     plt.show()
-
-def plot_count_heatmap(df, tile='tile', shape='square', plate='6W', return_summary=False, **kwargs):
-    """
-    Plot the count of items in df by well and tile in a convenient plate layout.
-    Useful for evaluating cell and read counts across wells. The colorbar label can 
-    be modified with:
-        axes[0,0].get_figure().axes[-1].set_ylabel(LABEL)
     
-    Parameters
-    ----------
-    df : pandas DataFrame
-
-    tile : str, default 'tile'
-        The column name to be used to group tiles, as sometimes 'site' is used.
-
-    shape : str, default 'square'
-        Shape of subplot for each well used in plot_plate_heatmap
-
-    plate : {'6W','24W','96W'}
-        Plate type for plot_plate_heatmap
-
-    return_summary : boolean, default False
-        If true, returns df_summary
-
-    **kwargs
-        Keyword arguments passed to plot_plate_heatmap()
-
-    Returns
-    -------
-    df_summary : pandas DataFrame
-        DataFrame used for plotting
-        optional output, only returns if return_summary=True
-
-    axes : np.array of matplotlib Axes objects
-    """
-    # Group data by well and tile and count the occurrences
-    df_summary = (df
-                  .groupby(['well',tile])
-                  .size()
-                  .rename('count')
-                  .to_frame()
-                  .reset_index()
-                 )
-
-    # Plot the heatmap using plot_plate_heatmap function
-    axes = plot_plate_heatmap(df_summary, shape=shape, plate=plate, **kwargs)
-
-    # Return df_summary and axes if return_summary is True, otherwise return only axes
-    if return_summary:
-        return df_summary, axes
-    return axes
-
-
-def plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one', mapping_strategy='barcodes', shape='square', plate='6W',
-                              return_plot=True, return_summary=False, **kwargs):
-    """Plot the mapping rate of cells by well and tile in a convenient plate layout.
-
-    Parameters
-    ----------
-    df_cells : pandas DataFrame
-        DataFrame of all cells output from sbs mapping pipeline, e.g., concatenated outputs for all tiles and wells 
-        of Snake.call_cells().
-
-    df_sbs_info : pandas DataFrame
-        DataFrame of all cells segmented from sbs images, e.g., concatenated outputs for all tiles and wells of 
-        Snake.extract_phenotype_minimal(data_phenotype=nulcei,nuclei=nuclei) often used as sbs_cell_info rule in 
-        Snakemake.
-
-    barcodes : list or set of strings
-        Expected barcodes from the pool library design.
-
-    mapping_to : {'one', 'any'}
-        Cells to include as 'mapped'. 'one' only includes cells mapping to a single barcode, 'any' includes cells
-        mapping to at least 1 barcode.
-
-    shape : str, default 'square'
-        Shape of subplot for each well used in plot_plate_heatmap
-
-    plate : {'6W','24W','96W'}
-        Plate type for plot_plate_heatmap
- 
-    return_plot : boolean, default True
-        If true, returns df_summary
-    
-    return_summary : boolean, default False
-        If true, returns df_summary
-
-    Other Parameters
-    ----------------
-    **kwargs
-        Keyword arguments passed to plot_plate_heatmap()
-
-    Returns
-    -------
-    df_summary : pandas DataFrame
-        DataFrame used for plotting
-        optional output, only returns if return_summary=True
-
-    axes : np.array of matplotlib Axes objects
-    """
-    # Mark cells as mapped or unmapped based on provided barcodes or gene symbols
-    if mapping_strategy == 'barcodes':
-        df_cells.loc[:, ['mapped_0', 'mapped_1']] = df_cells[['cell_barcode_0', 'cell_barcode_1']].isin(barcodes).values
-    elif mapping_strategy == 'gene_symbols':
-        df_cells['mapped_0'] = (~df_cells['gene_symbol_0'].isna()).astype(int)
-        df_cells['mapped_1'] = (~df_cells['gene_symbol_1'].isna()).astype(int)
-    else:
-        raise ValueError(f"Invalid mapping strategy: {mapping_strategy}. Choose 'barcodes' or 'gene_symbols'.")
-
-
-    # Merge cell mapping information with sbs info
-    df = (df_sbs_info[['well','tile','cell']]
-           .merge(df_cells[['well','tile','cell','mapped_0','mapped_1']],
-                  how='left',
-                  on=['well','tile','cell']
-                 )
-          )
-
-    # Determine mapping criteria and calculate mapping rates
-    if mapping_to == 'one':
-        metric = 'fraction of cells mapping to 1 barcode'
-        df = df.assign(mapped = lambda x: x[['mapped_0','mapped_1']].sum(axis=1)==1)
-    elif mapping_to == 'any':
-        metric = 'fraction of cells mapping to >=1 barcode'
-        df = df.assign(mapped = lambda x: x[['mapped_0','mapped_1']].sum(axis=1)>0)
-    else:
-        raise ValueError(f'mapping_to={mapping_to} not implemented')
-
-    # Calculate mapping rates by well and tile
-    df_summary = (df
-                  .groupby(['well','tile'])
-                  ['mapped']
-                  .value_counts(normalize=True)
-                  .rename(metric)
-                  .to_frame()
-                  .reset_index()
-                  .query('mapped')
-                  .drop(columns='mapped')
-                 )
-
-    if return_summary and return_plot:
-        return df_summary, axes
-    elif return_summary:
-        return df_summary
-    elif return_plot:
-        return axes
-    else:
-        return None
+    return outliers
 
 def plot_mapping_vs_threshold(df_reads, barcodes, threshold_var='peak', ax=None, **kwargs):
     """
@@ -291,7 +187,166 @@ def plot_mapping_vs_threshold(df_reads, barcodes, threshold_var='peak', ax=None,
 
     return df_summary
 
-def plot_read_mapping_heatmap(df_reads, barcodes, shape='square', plate='6W', return_summary=False, **kwargs):
+def plot_count_heatmap(df, tile='tile', shape='square', plate='6W',                               
+                       return_plot=True, return_summary=False, **kwargs):
+    """
+    Plot the count of items in df by well and tile in a convenient plate layout.
+    Useful for evaluating cell and read counts across wells. The colorbar label can 
+    be modified with:
+        axes[0,0].get_figure().axes[-1].set_ylabel(LABEL)
+    
+    Parameters
+    ----------
+    df : pandas DataFrame
+
+    tile : str, default 'tile'
+        The column name to be used to group tiles, as sometimes 'site' is used.
+
+    shape : str, default 'square'
+        Shape of subplot for each well used in plot_plate_heatmap
+
+    plate : {'6W','24W','96W'}
+        Plate type for plot_plate_heatmap
+
+    return_summary : boolean, default False
+        If true, returns df_summary
+
+    **kwargs
+        Keyword arguments passed to plot_plate_heatmap()
+
+    Returns
+    -------
+    df_summary : pandas DataFrame
+        DataFrame used for plotting
+        optional output, only returns if return_summary=True
+
+    axes : np.array of matplotlib Axes objects
+    """
+    # Group data by well and tile and count the occurrences
+    df_summary = (df
+                  .groupby(['well',tile])
+                  .size()
+                  .rename('count')
+                  .to_frame()
+                  .reset_index()
+                 )
+
+    if return_summary and return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return df_summary, axes
+    elif return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return axes
+    elif return_summary:
+        return df_summary
+    else:
+        return None
+
+
+def plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one', mapping_strategy='barcodes', shape='square', plate='6W',
+                              return_plot=True, return_summary=False, **kwargs):
+    """Plot the mapping rate of cells by well and tile in a convenient plate layout.
+
+    Parameters
+    ----------
+    df_cells : pandas DataFrame
+        DataFrame of all cells output from sbs mapping pipeline, e.g., concatenated outputs for all tiles and wells 
+        of Snake.call_cells().
+
+    df_sbs_info : pandas DataFrame
+        DataFrame of all cells segmented from sbs images, e.g., concatenated outputs for all tiles and wells of 
+        Snake.extract_phenotype_minimal(data_phenotype=nulcei,nuclei=nuclei) often used as sbs_cell_info rule in 
+        Snakemake.
+
+    barcodes : list or set of strings
+        Expected barcodes from the pool library design.
+
+    mapping_to : {'one', 'any'}
+        Cells to include as 'mapped'. 'one' only includes cells mapping to a single barcode, 'any' includes cells
+        mapping to at least 1 barcode.
+
+    shape : str, default 'square'
+        Shape of subplot for each well used in plot_plate_heatmap
+
+    plate : {'6W','24W','96W'}
+        Plate type for plot_plate_heatmap
+ 
+    return_plot : boolean, default True
+        If true, returns df_summary
+    
+    return_summary : boolean, default False
+        If true, returns df_summary
+
+    Other Parameters
+    ----------------
+    **kwargs
+        Keyword arguments passed to plot_plate_heatmap()
+
+    Returns
+    -------
+    df_summary : pandas DataFrame
+        DataFrame used for plotting
+        optional output, only returns if return_summary=True
+
+    axes : np.array of matplotlib Axes objects
+    """
+    
+    # Mark cells as mapped or unmapped based on provided barcodes or gene symbols
+    if mapping_strategy == 'barcodes':
+        df_cells.loc[:, ['mapped_0', 'mapped_1']] = df_cells[['cell_barcode_0', 'cell_barcode_1']].isin(barcodes).values
+    elif mapping_strategy == 'gene_symbols':
+        df_cells['mapped_0'] = (~df_cells['gene_symbol_0'].isna()).astype(int)
+        df_cells['mapped_1'] = (~df_cells['gene_symbol_1'].isna()).astype(int)
+    else:
+        raise ValueError(f"Invalid mapping strategy: {mapping_strategy}. Choose 'barcodes' or 'gene_symbols'.")
+
+    # Merge cell mapping information with sbs info
+    df = (df_sbs_info[['well','tile','cell']]
+           .merge(df_cells[['well','tile','cell','mapped_0','mapped_1']],
+                  how='left',
+                  on=['well','tile','cell']
+                 )
+          )
+  
+    # Determine mapping criteria and calculate mapping rates
+    if mapping_to == 'one':
+        metric = 'fraction of cells mapping to 1 barcode'
+        df = df.assign(mapped = lambda x: x[['mapped_0','mapped_1']].sum(axis=1)==1)
+    elif mapping_to == 'any':
+        metric = 'fraction of cells mapping to >=1 barcode'
+        df = df.assign(mapped = lambda x: x[['mapped_0','mapped_1']].sum(axis=1)>0)
+    else:
+        raise ValueError(f'mapping_to={mapping_to} not implemented')
+        
+    # Calculate mapping rates by well and tile
+    df_summary = (df
+                  .groupby(['well','tile'])
+                  ['mapped']
+                  .value_counts(normalize=True)
+                  .rename(metric)
+                  .to_frame()
+                  .reset_index()
+                  .query('mapped')
+                  .drop(columns='mapped')
+                 )
+        
+    if return_summary and return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return df_summary, axes
+    elif return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return axes
+    elif return_summary:
+        return df_summary
+    else:
+        return None
+
+def plot_read_mapping_heatmap(df_reads, barcodes, shape='square', plate='6W', 
+                              return_plot=True, return_summary=False, **kwargs):
     """Plot the mapping rate of reads by well and tile in a convenient plate layout.
 
     Parameters
@@ -309,6 +364,9 @@ def plot_read_mapping_heatmap(df_reads, barcodes, shape='square', plate='6W', re
     plate : {'6W','24W','96W'}
         Plate type for plot_plate_heatmap
 
+    return_plot : boolean, default True
+        If true, returns df_summary
+    
     return_summary : boolean, default False
         If true, returns df_summary
 
@@ -340,15 +398,21 @@ def plot_read_mapping_heatmap(df_reads, barcodes, shape='square', plate='6W', re
                    .drop(columns='mapped')
                   )
 
-    # Plot heatmap
-    axes = plot_plate_heatmap(df_summary, shape=shape, plate=plate, **kwargs)
-
-    if return_summary:
-        return df_summary,axes
-    return axes
+    if return_summary and return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return df_summary, axes
+    elif return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return axes
+    elif return_summary:
+        return df_summary
+    else:
+        return None
 
 def plot_sbs_ph_matching_heatmap(df_merge, df_info, target='sbs', shape='square', plate='6W',
-    return_summary=False, **kwargs):
+                                 return_plot=True, return_summary=False, **kwargs):
     """Plot the rate of matching segmented cells between phenotype and SBS datasets by well and tile 
     in a convenient plate layout.
 
@@ -375,6 +439,9 @@ def plot_sbs_ph_matching_heatmap(df_merge, df_info, target='sbs', shape='square'
     plate : {'6W','24W','96W'}
         Plate type for plot_plate_heatmap
 
+    return_plot : boolean, default True
+        If true, returns df_summary
+    
     return_summary : boolean, default False
         If true, returns df_summary
 
@@ -425,12 +492,18 @@ def plot_sbs_ph_matching_heatmap(df_merge, df_info, target='sbs', shape='square'
                   .rename(columns={merge_cols[0]: 'tile'})
                   )
     
-    # Plot heatmap
-    axes = plot_plate_heatmap(df_summary, shape=shape, plate=plate, **kwargs)
-
-    if return_summary:
+    if return_summary and return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
         return df_summary, axes
-    return axes
+    elif return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary,shape=shape,plate=plate,**kwargs)
+        return axes
+    elif return_summary:
+        return df_summary
+    else:
+        return None
 
 def plot_plate_heatmap(df, metric=None, shape='square', plate='6W', snake_sites=True, **kwargs): 
     """
