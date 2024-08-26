@@ -312,7 +312,7 @@ class Snake():
         return aligned
 
     @staticmethod
-    def _stack_channels(data):
+    def _stack_channels(data, flip_channels=False):
         """
         Stack channels from the given datasets into a single numpy array with the channel dimension as the third-to-last axis.
 
@@ -321,6 +321,8 @@ class Snake():
         data : list of np.ndarrays
             A list of datasets, where each dataset can have different shapes.
             If a dataset has more than two dimensions, it is assumed to have a channel dimension.
+        flip_channels : bool, optional
+            If True, flip the channel order for datasets with more than 2 dimensions. Default is False.
 
         Returns
         -------
@@ -334,6 +336,9 @@ class Snake():
         for dataset in data:
             # Check if the dataset has more than 2 dimensions (i.e., it has a channel dimension)
             if len(dataset.shape) > 2:
+                # Flip the channels if requested
+                if flip_channels:
+                    dataset = np.flip(dataset, axis=0)
                 # Extract each channel and append it to the arr list
                 arr.extend([dataset[..., channel, :, :] for channel in range(dataset.shape[-3])])
             else:

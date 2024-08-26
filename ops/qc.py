@@ -98,6 +98,7 @@ def plot_gene_symbol_histogram(df, x_cutoff=40):
     plt.title("Histogram of Gene Symbol Counts", fontsize=16, fontweight='bold')
     plt.xlabel("Number of cells per mapped gene", fontsize=12)
     plt.ylabel("Number of mapped genes", fontsize=12)
+<<<<<<< Updated upstream
     
     outliers = gene_symbol_counts[gene_symbol_counts > x_cutoff]
     
@@ -117,6 +118,74 @@ def plot_gene_symbol_histogram(df, x_cutoff=40):
     plt.show()
     
     return outliers
+=======
+    
+    outliers = gene_symbol_counts[gene_symbol_counts > x_cutoff]
+    
+    # Restrict x-axis to stop at x_cutoff and set integer ticks
+    plt.xlim(0, x_cutoff)
+    plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    
+    # Format y-axis to use scientific notation
+    plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+    plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    
+    # Remove top and right spines
+    sns.despine()
+    
+    # Adjust layout and display the plot
+    plt.tight_layout()
+    plt.show()
+    
+    return outliers
+
+def plot_barcodes_per_gene(df_cells, cutoff=10, output_file=None):
+    """
+    Analyze the distribution of barcodes per gene and create a pie chart.
+    
+    Parameters
+    ----------
+    df_cells : pandas DataFrame
+        DataFrame containing the cell data with columns including 'gene_symbol_0' and 'cell_barcode_0'.
+    cutoff : int, optional
+        The maximum number of barcodes to be counted individually. Counts above this will be grouped. Default is 10.
+    output_file : str, optional
+        File path to save the pie chart. If None, the chart will be displayed instead.
+    
+    Returns
+    -------
+    gene_barcode_counts : pandas DataFrame
+        DataFrame with gene symbols, their barcode counts, and categories.
+    """
+    # Group by gene symbol and count unique barcodes
+    gene_barcode_counts = df_cells.groupby('gene_symbol_0')['cell_barcode_0'].nunique().reset_index()
+    gene_barcode_counts.columns = ['gene_symbol', 'barcode_count']
+    
+    # Categorize the counts
+    def categorize_count(count):
+        if count <= cutoff:
+            return f'{count} barcode{"s" if count > 1 else ""}'
+        else:
+            return f'>{cutoff} barcodes'
+    
+    gene_barcode_counts['category'] = gene_barcode_counts['barcode_count'].apply(categorize_count)
+    
+    # Count the number of genes in each category
+    category_counts = gene_barcode_counts['category'].value_counts().sort_index()
+    
+    # Create a pie chart without labels and percentages
+    plt.figure(figsize=(12, 8))
+    wedges, _ = plt.pie(category_counts.values, startangle=90)
+    plt.title(f'Distribution of Barcodes per Gene (Cutoff: {cutoff})')
+    
+    # Add a legend
+    plt.legend(wedges, category_counts.index, title="Barcode Categories", loc="center left", bbox_to_anchor=(1, 0.5))
+    
+    plt.show()
+    
+    # Return the DataFrame with gene barcode counts and categories
+    return gene_barcode_counts
+>>>>>>> Stashed changes
 
 def plot_mapping_vs_threshold(df_reads, barcodes, threshold_var='peak', ax=None, **kwargs):
     """
@@ -243,8 +312,62 @@ def plot_count_heatmap(df, tile='tile', shape='square', plate='6W',
         return df_summary
     else:
         return None
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 
+def plot_feature_heatmap(df, feature, tile='tile', shape='square', plate='6W', 
+                         agg_func='median', return_plot=True, return_summary=False, **kwargs):
+    """
+    Plot a heatmap of a specified feature in df by well and tile in a convenient plate layout.
+    
+    Parameters
+    ----------
+    df : pandas DataFrame
+    feature : str
+        The column name of the feature to be plotted
+    tile : str, default 'tile'
+        The column name to be used to group tiles, as sometimes 'site' is used.
+    shape : str, default 'square'
+        Shape of subplot for each well used in plot_plate_heatmap
+    plate : {'6W','24W','96W'}
+        Plate type for plot_plate_heatmap
+    agg_func : str or function, default 'mean'
+        The aggregation function to use when grouping by well and tile.
+        Can be 'mean', 'median', 'sum', or any function that can be passed to pandas agg()
+    return_summary : boolean, default False
+        If true, returns df_summary
+    **kwargs
+        Keyword arguments passed to plot_plate_heatmap()
+    
+    Returns
+    -------
+    df_summary : pandas DataFrame
+        DataFrame used for plotting
+        optional output, only returns if return_summary=True
+    axes : np.array of matplotlib Axes objects
+    """
+    # Group data by well and tile and aggregate the specified feature
+    df_summary = (df
+                  .groupby(['well', tile])
+                  .agg({feature: agg_func})
+                  .reset_index()
+                 )
+    
+    if return_summary and return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary, metric=feature, shape=shape, plate=plate, **kwargs)
+        return df_summary, axes
+    elif return_plot:
+        # Plot heatmap
+        axes = plot_plate_heatmap(df_summary, metric=feature, shape=shape, plate=plate, **kwargs)
+        return axes
+    elif return_summary:
+        return df_summary
+    else:
+        return None
+    
 def plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one', mapping_strategy='barcodes', shape='square', plate='6W',
                               return_plot=True, return_summary=False, **kwargs):
     """Plot the mapping rate of cells by well and tile in a convenient plate layout.

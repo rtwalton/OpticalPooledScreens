@@ -34,12 +34,10 @@ This module provides a workflow for preprocessing ND2 microscopy files, generati
 ## Dependencies
 
 - Python libraries: numpy, pandas, matplotlib, seaborn, tifffile, microfilm
-- Snakemake
-- ImageJ (for some TIFF operations)
 - ops package modules:
   - ops.preprocessing_smk: For specific preprocessing functions used in the Snakemake workflow
-  - ops.filenames: For handling file naming conventions
-  - ops.process: For image processing functions, including calculate_illumination_correction
+      - ops.filenames: For handling file naming conventions
+      - ops.process: For image processing functions, including calculate_illumination_correction
   - ops.io: For input/output operations, including save_stack
 
 ## Notes
