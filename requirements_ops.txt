@@ -204,11 +204,6 @@ pylint==2.1.1
 PyOpenGL==3.1.7
 pyparsing==3.1.2
 pyproject_hooks==1.1.0
-PyQt5-Qt5==5.15.14
-PyQt5_sip==12.15.0
-PyQt6==6.6.1
-PyQt6-Qt6==6.6.1
-PyQt6-sip==13.6.0
 pyqtgraph==0.13.3
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
