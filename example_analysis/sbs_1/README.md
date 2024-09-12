@@ -40,7 +40,6 @@ This module provides a workflow for processing Sequencing By Synthesis (SBS) mic
       - ops.in_situ: For in situ sequencing analysis
       - ops.cellpose: For cell segmentation using Cellpose
       - ops.process: For image processing operations
->>>>>>> Stashed changes
   - ops.qc: For quality control functions
 
 ## Notes

@@ -2645,7 +2645,7 @@ class Snake():
         # Convert the function to a static method
         f = staticmethod(f)
 
-        # Dynamically add the method to the class
+        # Dynamicaly add the method to the class
         exec('%s.%s = f' % (class_, name))
 
 

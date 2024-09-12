@@ -98,27 +98,6 @@ def plot_gene_symbol_histogram(df, x_cutoff=40):
     plt.title("Histogram of Gene Symbol Counts", fontsize=16, fontweight='bold')
     plt.xlabel("Number of cells per mapped gene", fontsize=12)
     plt.ylabel("Number of mapped genes", fontsize=12)
-<<<<<<< Updated upstream
-    
-    outliers = gene_symbol_counts[gene_symbol_counts > x_cutoff]
-    
-    # Restrict x-axis to stop at x_cutoff and set integer ticks
-    plt.xlim(0, x_cutoff)
-    plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    
-    # Format y-axis to use scientific notation
-    plt.gca().yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
-    plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-    
-    # Remove top and right spines
-    sns.despine()
-    
-    # Adjust layout and display the plot
-    plt.tight_layout()
-    plt.show()
-    
-    return outliers
-=======
     
     outliers = gene_symbol_counts[gene_symbol_counts > x_cutoff]
     
@@ -185,7 +164,6 @@ def plot_barcodes_per_gene(df_cells, cutoff=10, output_file=None):
     
     # Return the DataFrame with gene barcode counts and categories
     return gene_barcode_counts
->>>>>>> Stashed changes
 
 def plot_mapping_vs_threshold(df_reads, barcodes, threshold_var='peak', ax=None, **kwargs):
     """
@@ -312,10 +290,6 @@ def plot_count_heatmap(df, tile='tile', shape='square', plate='6W',
         return df_summary
     else:
         return None
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
 
 def plot_feature_heatmap(df, feature, tile='tile', shape='square', plate='6W', 
                          agg_func='median', return_plot=True, return_summary=False, **kwargs):

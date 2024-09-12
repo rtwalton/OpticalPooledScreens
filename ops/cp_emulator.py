@@ -2,28 +2,29 @@
 Phenotype Feature Extraction Module
 
 This module provides a comprehensive set of functions for extracting 
-phenotypic features images, (relating to step 2 -- phenotyping). 
+phenotypic features images, (relating to step 2 -- phenotyping),
+seeking to replicate the feature extraction capabilities of CellProfiler.
 It includes functions for:
 
-1. Segmentation: Functions for identifying secondary objects and cell boundaries.
-2. Intensity Features: Extraction of various intensity-based metrics for cellular regions.
-3. Texture Features: Computation of texture-related features using methods like Haralick and PFTAS.
-4. Shape Features: Calculation of morphological features including Zernike moments and Feret diameters.
-5. Distribution Features: Analysis of intensity distributions within cellular regions.
-6. Neighbor Analysis: Functions for analyzing spatial relationships between cells.
-7. Colocalization Metrics: Computation of various colocalization coefficients for multi-channel images.
-8. Utility Functions: Helper functions for geometric calculations and image processing.
-
+1. Cellprofiler emulator functions: Functions for segmenting and feature extraction (not used).
+2. Cellprofiler, mahotas, skimage feature dictionaries:
+	1. Intensity Features: Extraction of various intensity-based metrics for cellular regions.
+	2. Texture Features: Computation of texture-related features using methods like Haralick and PFTAS.
+	3. Shape Features: Calculation of morphological features including Zernike moments and Feret diameters.
+	4. Distribution Features: Analysis of intensity distributions within cellular regions.
+	5. Neighbor Analysis: Functions for analyzing spatial relationships between cells.
+	6. Colocalization Metrics: Computation of various colocalization coefficients for multi-channel images.
+3. Combined Feature Dictionaries: Aggregated dictionaries of features and columns for images.
+4. Feature Extraction Functions: Functions for extracting features from images using the dictionaries.
 """
 
 import numpy as np
 from scipy.stats import median_abs_deviation, rankdata # new in version 1.3.0
 from scipy.spatial.distance import pdist
 from scipy.ndimage.morphology import distance_transform_edt as distance_transform
-# from scipy.ndimage import map_coordinates # only required for granularity spectrum, which is currently unused
 from mahotas.features import haralick, pftas, zernike_moments
 from mahotas.thresholding import otsu
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, QhullError
 from functools import partial
 from itertools import starmap, combinations
 from warnings import catch_warnings,simplefilter
@@ -33,40 +34,65 @@ from skimage import img_as_ubyte
 from ops.features import correlate_channels_masked, masked, correlate_channels_all_multichannel
 from ops.utils import subimage
 from decorator import decorator
+from itertools import combinations
+# from scipy.ndimage import map_coordinates # only required for granularity spectrum, which is currently unused
 
 ######################################################################################################################################
 
-## SEGMENTATION
+## CELLPROFILER SEGMENTATION FUNCTIONS (UNUSED)
 
 def identify_secondary_objects(image, primary_segmentation, method='propagation', regularization_factor=0.05,
-	threshold='otsu', remove_boundary_objects=True):
-	if method != 'propagation':
-		raise ValueError(f'method={method} not implemented')
+    threshold='otsu', remove_boundary_objects=True):
+    """
+    Identifies secondary objects in an image based on primary segmentation.
+    
+    Parameters:
+    - image: Input image
+    - primary_segmentation: Segmentation of primary objects
+    - method: Segmentation method (only 'propagation' is implemented)
+    - regularization_factor: Factor for regularization in propagation
+    - threshold: Method or value for thresholding ('otsu', array, or numeric)
+    - remove_boundary_objects: Whether to remove objects touching the image boundary
+    """
+    
+    # Check if the method is supported (only 'propagation' is implemented)
+    if method != 'propagation':
+        raise ValueError(f'method={method} not implemented')
 
-	from centrosome.propagate import propagate
+    # Import the propagate function from centrosome library
+    from centrosome.propagate import propagate
 
-	if isinstance(threshold,np.ndarray):
-		# pre-thresholded
-		thresholded = threshold
-	elif isinstance(threshold,(int,float)):
-		thresholded = image > threshold
-	elif threshold == 'otsu':
-		thresholded = image > otsu(image)
-	else:
-		raise ValueError(f'threshold={threshold} not implemented')
-		
-	secondary_segmentation,_ = propagate(img_as_ubyte(image),primary_segmentation,thresholded,regularization_factor)
+    # Determine the thresholding method
+    if isinstance(threshold, np.ndarray):
+        # If threshold is already an array, use it directly
+        thresholded = threshold
+    elif isinstance(threshold, (int, float)):
+        # If threshold is a number, apply simple thresholding
+        thresholded = image > threshold
+    elif threshold == 'otsu':
+        # If 'otsu', apply Otsu's thresholding method
+        thresholded = image > otsu(image)
+    else:
+        # Raise error for unsupported thresholding methods
+        raise ValueError(f'threshold={threshold} not implemented')
 
-	if remove_boundary_objects:
-		cut = np.concatenate([secondary_segmentation[0,:], secondary_segmentation[-1,:],
-			secondary_segmentation[:,0], secondary_segmentation[:,-1]])
-		secondary_segmentation.flat[np.in1d(secondary_segmentation, np.unique(cut))] = 0
+    # Perform propagation to identify secondary objects
+    secondary_segmentation, _ = propagate(img_as_ubyte(image), primary_segmentation, thresholded, regularization_factor)
 
-	return secondary_segmentation.astype(np.uint16)
+    # Optionally remove objects touching the image boundary
+    if remove_boundary_objects:
+        # Identify objects touching the boundary
+        cut = np.concatenate([secondary_segmentation[0,:], secondary_segmentation[-1,:],
+            secondary_segmentation[:,0], secondary_segmentation[:,-1]])
+        # Set boundary-touching objects to 0 (background)
+        secondary_segmentation.flat[np.in1d(secondary_segmentation, np.unique(cut))] = 0
+
+    # Return the secondary segmentation as 16-bit unsigned integers
+    return secondary_segmentation.astype(np.uint16)
 
 ######################################################################################################################################
 
-## FEATURES
+## CELLPROFILER FEATURE EXTRACTION FUNCTIONS (UNUSED)
 
 # Predefined features from CellProfiler and additional sources (scikit-image and mahotas), implemented as functions operating
 # on scikit-image RegionProps objects.
@@ -96,25 +122,49 @@ def identify_secondary_objects(image, primary_segmentation, method='propagation'
 # Length scales needed for feature extraction should technically be correspondingly scaled,
 # e.g., 20X with 1x1 binning images should use suggested linear length scales * 2
 
-def apply_extract_features_cp(well_tile,filepattern):
-	from ops.io_hdf import read_hdf_image
-	from ops.io import read_stack as read
-	from ops.firesnake import Snake
-	from ops.filenames import name_file as name
-	wildcards = {'well':well_tile[0],'tile':well_tile[1]}
-	filepattern.update(wildcards)
-	stacked = read_hdf_image(name(filepattern))
-	nuclei = read(name(filepattern,subdir='process_ph',tag='nuclei',ext='tif'))
-	cells = read(name(filepattern,subdir='process_ph',tag='cells',ext='tif'))
-	df_result = Snake._extract_phenotype_cp(data_phenotype=stacked,
-                                            nuclei=nuclei,
-                                            cells=cells,
-                                            wildcards=wildcards,
-                                            nucleus_channels=[0,1,2,3],
-                                            cell_channels=[0,1,2,3],
-                                            channel_names=['dapi','tubulin','gh2ax','phalloidin']
-                                           )
-	df_result.to_csv(name(filepattern,subdir='process_ph',tag='cp_phenotype',ext='csv'))
+def apply_extract_features_cp(well_tile, filepattern):
+    """
+    Extracts cellular phenotype features from microscopy images for a specific well and tile.
+
+    Parameters:
+    - well_tile: Tuple containing well and tile identifiers
+    - filepattern: Dictionary or object containing file naming patterns
+    """
+
+    # Import necessary functions from custom modules
+    from ops.io_hdf import read_hdf_image
+    from ops.io import read_stack as read
+    from ops.firesnake import Snake
+    from ops.filenames import name_file as name
+
+    # Create wildcards dictionary for file naming
+    wildcards = {'well': well_tile[0], 'tile': well_tile[1]}
+    filepattern.update(wildcards)
+
+    # Read the stacked (multi-channel) image data
+    stacked = read_hdf_image(name(filepattern))
+
+    # Read the nuclei and cell segmentation images
+    nuclei = read(name(filepattern, subdir='process_ph', tag='nuclei', ext='tif'))
+    cells = read(name(filepattern, subdir='process_ph', tag='cells', ext='tif'))
+
+    # Extract phenotype features using Snake._extract_phenotype_cp method
+    df_result = Snake._extract_phenotype_cp(
+        data_phenotype=stacked,
+        nuclei=nuclei,
+        cells=cells,
+        wildcards=wildcards,
+        nucleus_channels=[0, 1, 2, 3],  # Use all 4 channels for nucleus analysis
+        cell_channels=[0, 1, 2, 3],     # Use all 4 channels for cell analysis
+        channel_names=['dapi', 'tubulin', 'gh2ax', 'phalloidin']
+    )
+
+    # Save the resulting features to a CSV file
+    df_result.to_csv(name(filepattern, subdir='process_ph', tag='cp_phenotype', ext='csv'))
+
+######################################################################################################################################
+
+## CELLPROFILER FEATURE DICTIONARIES (IN USE)
 
 # MeasureCorrelation
 # This module is now named MeasureColocalization in CellProfiler
@@ -185,19 +235,18 @@ correlation_columns_multichannel = {
 # In practice, this has been found hard to tune for each experiment/channel, and computationally expensive,
 # thus these features are not advised for most applications.
 
-# GRANULARITY_BACKGROUND = 10 #this should be a bit larger than the radius of the features, i.e., "granules", of interest after downsampling
-# GRANULARITY_BACKGROUND_DOWNSAMPLE = 1
-# GRANULARITY_DOWNSAMPLE = 1
-# GRANULARITY_LENGTH = 16
+GRANULARITY_BACKGROUND = 10 #this should be a bit larger than the radius of the features, i.e., "granules", of interest after downsampling
+GRANULARITY_BACKGROUND_DOWNSAMPLE = 1
+GRANULARITY_DOWNSAMPLE = 1
+GRANULARITY_LENGTH = 16
 
-# granularity_features = {
-# 	'granularity_spectrum' : lambda r: granularity_spectrum(r.intensity_image_full, r.image, 
-# 		background_radius=GRANULARITY_BACKGROUND, spectrum_length=GRANULARITY_LENGTH, 
-# 		downsample=GRANULARITY_DOWNSAMPLE, background_downsample=GRANULARITY_BACKGROUND_DOWNSAMPLE)
-# }
+granularity_features = {
+	'granularity_spectrum' : lambda r: granularity_spectrum(r.intensity_image_full, r.image, 
+		background_radius=GRANULARITY_BACKGROUND, spectrum_length=GRANULARITY_LENGTH, 
+		downsample=GRANULARITY_DOWNSAMPLE, background_downsample=GRANULARITY_BACKGROUND_DOWNSAMPLE)
+}
 
 # MeasureObjectIntensity
-
 EDGE_CONNECTIVITY = 2 # cellprofiler uses edge connectivity of 1, which exlucdes pixels catty-corner to a boundary
 
 intensity_features = {
@@ -403,9 +452,7 @@ shape_features = {
 	# compactness from centrosome.cpmorphology.ellipse_from_second_moments(): "variance of the radial distribution normalized by the area"
     'compactness' : lambda r: 2*np.pi*(r.moments_central[0,2]+r.moments_central[2,0])/(r.area**2),
     'radius' : lambda r: max_median_mean_radius(r.filled_image),
-	# feret diameter is relatively expensive, likely high correlation with major/minor axis; 
-	# looks like max feret will be added to skimage regionprops, but not yet
-    'feret_diameter' : lambda r: min_max_feret_diameter(r.coords),
+    'feret_diameter' : lambda r: min_max_feret_diameter(r.coords), 	# feret diameter is relatively expensive, likely high correlation with major/minor axis; 
     'hu_moments': lambda r: r.moments_hu,
     'zernike' : lambda r: zernike_minimum_enclosing_circle(r.coords, degree=ZERNIKE_DEGREE)
 }
@@ -423,9 +470,7 @@ shape_columns.update({
 	'radius_2':'mean_radius',
 	'feret_diameter_0':'min_feret_diameter',
 	'feret_diameter_1':'max_feret_diameter',
-	# The remainder of the feret-related features are really for plotting purposes, 
-	# should exclude from all phenotype analysis
-	'feret_diameter_2':'min_feret_r0',
+	'feret_diameter_2':'min_feret_r0', 	# The remainder of the feret-related features are really for plotting purposes, 
 	'feret_diameter_3':'min_feret_c0',
 	'feret_diameter_4':'min_feret_r1',
 	'feret_diameter_5':'min_feret_c1',
@@ -488,8 +533,7 @@ texture_columns_multichannel = {
 grayscale_features = {**intensity_features,
 					  **intensity_distribution_features,
 					  **texture_features,
-					  # really slow
-					  # **granularity_features
+					  # **granularity_features # really slow
 					 }
 
 grayscale_features_ch = {**intensity_features_ch,
@@ -989,11 +1033,6 @@ def max_median_mean_radius(filled_image):
 		np.median(transformed),
 		transformed.mean()
 		)
-
-from scipy.spatial import ConvexHull, QhullError
-import numpy as np
-from scipy.spatial.distance import pdist
-from itertools import combinations
 
 def min_max_feret_diameter(coords):
     """ 
