@@ -7,3 +7,5 @@ ops_lasagna.egg-info/
 
 venv/
 venv_ops_new/
+test/
+venv_ops/
