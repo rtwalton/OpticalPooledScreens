@@ -39,7 +39,7 @@ def feature_transform(df, transformation_dict, channels):
     
     return df
 
-# Function to 
+# Function to standardize the data
 def grouped_standardization(df, population_feature='gene_symbol', control_prefix='nontargeting', group_columns=['plate', 'well'], index_columns=['tile', 'cell'], cat_columns=['gene_symbol', 'sgRNA'], target_features=None, drop_features=False):
     '''Standardizes the numerical columns of df by evaluating the robust z-score. The null model for each
     measurement is estimated as its empirical distribution for the control_prefix. If group_column is specified, the 
