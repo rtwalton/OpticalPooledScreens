@@ -15,10 +15,10 @@ git clone https://github.com/cheeseman-lab/OpticalPooledScreens.git
 ### Step 2: Install Python 3 Virtual Environment
 
 ```sh
-# navigate to the project directory
+# Navigate to the project directory
 cd OpticalPooledScreens
 
-# create virtual environment and install packages
+# Create virtual environment and install packages
 sh install.sh
 ```
 

@@ -16,4 +16,7 @@ pip install -r requirements_ops.txt
 # Jupyter and Snakemake will import code from .py files in the ops/ directory
 pip install -e .
 
+# Register the 'venv_ops' virtual environment with Jupyter
+python -m ipykernel install --user --name=venv_ops
+
 echo "Installation complete. Virtual environment 'venv_ops' is set up."
