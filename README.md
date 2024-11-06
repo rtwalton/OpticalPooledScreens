@@ -1,7 +1,5 @@
 # Optical Pooled Screens
 
-## About this Repository
-
 This repository contains the computational pipeline for analyzing Optical Pooled Screens (OPS), a high-throughput imaging-based method for functional genomic screening. The codebase enables automated analysis of large-scale microscopy data to evaluate phenotypic changes resulting from CRISPR-based genetic perturbations.
 Key features include:
 
@@ -12,8 +10,6 @@ Key features include:
 - Statistical analysis of gene-phenotype relationships
 
 The code is designed to handle the complex computational challenges of linking genetic perturbations to cellular phenotypes in pooled optical screens.
-
-## Usage
 
 ### Step 1: Download OpticalPooledScreens Directory
 ```sh
@@ -35,7 +31,7 @@ Once installed, one can activate the virtual environment from the project direct
 source venv_ops/bin/activate
 ```
 
-## Step 3: Running
+### Step 3: Running
 The `example_analysis/` directory contains the main code for running OPS analysis. Each subfolder includes individual READMEs that specify how to do the analysis.
 We are working on improving this codebase and a streamlined, optimized release is forthcoming.
 
