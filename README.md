@@ -11,6 +11,8 @@ Key features include:
 
 The code is designed to handle the complex computational challenges of linking genetic perturbations to cellular phenotypes in pooled optical screens.
 
+## Using the codebase
+
 ### Step 1: Download OpticalPooledScreens Directory
 ```sh
 git clone https://github.com/cheeseman-lab/OpticalPooledScreens.git
@@ -36,17 +38,15 @@ The `example_analysis/` directory contains the main code for running OPS analysi
 We are working on improving this codebase and a streamlined, optimized release is forthcoming.
 
 ## Issues
-If you encounter any problems with the code, please open an issue on our GitHub repository.
-
-We actively monitor issues and will work to resolve them as quickly as possible.
+If you encounter any problems with the code, please open an issue on our GitHub repository. We actively monitor issues and will work to resolve them as quickly as possible.
 
 ## Citations
 
-### Primary Citation
+#### Primary Citation
 If you use this code in your research, please cite:
 
 Funk, L., Su, K. C., Ly, J., Feldman, D., Singh, A., Moodie, B., Blainey, P. C., & Cheeseman, I. M. (2022). The phenotypic landscape of essential human genes. Cell, 185(24), 4634-4653.e22. https://doi.org/10.1016/j.cell.2022.10.017
 
-### Code Attribution
+#### Code Attribution
 This codebase is adapted from the original OpticalPooledScreens repository:
 https://github.com/lukebfunk/OpticalPooledScreens
