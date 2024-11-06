@@ -5,6 +5,9 @@ __pycache__/
 
 ops_lasagna.egg-info/
 
+requirements.txt
+requirements_venv_ops_new.txt
+
 venv/
 venv_ops/
 venv_ops_new/
