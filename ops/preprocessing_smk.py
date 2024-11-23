@@ -337,6 +337,25 @@ def extract_cycle(filename):
     else:
         raise ValueError(f"Could not extract cycle number from filename: {filename}")
 
+
+def extract_ph_round(filename):
+    """
+    Extracts the phenotyping round from a filename assuming that the file
+    has "/ph_r(\d+)/" in its name.
+    Args:
+        filename (str): The filename containing the phenotyping round information.
+    Returns:
+        str: The extracted phenotyping round in the format 'ph_r{number}'.
+    """
+    # Use regex to find the cycle number
+    match = re.search(r'/ph_r(\d+)/', filename)
+    if match:
+        ph_round = match.group(1)
+        ph_round_str = f'PH-r{ph_round}'
+        return ph_round_str
+    else:
+        raise ValueError(f"Could not extract phenotype round number from filename: {filename}")
+
 def extract_well(full_filename):
     """
     Extracts the Well from the filename assuming that the file has Wells-XX_ or WellXX_ in its name.
@@ -377,9 +396,17 @@ def extract_tile(full_filename):
     """
     # Extract the filename from the full path
     short_fname = full_filename.split('/')[-1]
+
+    # A couple potential formats for tile information
+    # one is Points{well}_{tile}_Channel
+    match = re.search('Point[A-Z]\d{1,4}_(?P<tile>\d*)_Channel', short_fname)
+    if match is not None:
+        seq = str(match.groupdict()['tile'])
+        return seq
     
+    # Another format is 'Points-'
     # Find the location of 'Points-' in the filename
-    seq_loc = short_fname.find('Points-')
+    seq_loc1 = short_fname.find('Points-')
     
     if seq_loc == -1:
         raise ValueError("No 'Points-' found in the filename.")
@@ -454,13 +481,18 @@ def parse_file(filename, home, dataset, tiles=False, channels=False):
     if 'input_ph' in filename.split('/'):
         file_description['mag'] = '20X'
         file_description['tag'] = 'phenotype'
+        file_description['ph_round'] = extract_ph_round(filename)
         file_description['subdir'] = 'input_ph_tif'
     elif 'input_sbs' in filename.split('/'):
         file_description['mag'] = '10X'
         file_description['tag'] = 'sbs'
         file_description['cycle'] = extract_cycle(filename)
         file_description['subdir'] = 'input_sbs_tif'
-
+    elif 'input_segment' in filename.split('/'):
+        file_description['mag'] = '10X'
+        file_description['tag'] = 'segment'
+        file_description['subdir'] = 'input_segment_tif'
+    
     return file_description
 
 # SNAKEMAKE FUNCTIONS

@@ -11,7 +11,7 @@ pip install wheel
 
 # Install dependencies from the requirements file
 pip install numpy==1.23.5
-pip install -r requirements_ops.txt
+pip install --no-cache-dir -r requirements_ops.txt
 
 # Link ops package instead of copying
 # Jupyter and Snakemake will import code from .py files in the ops/ directory

@@ -183,6 +183,27 @@ class Snake_sbs:
 
         return aligned
 
+    @staticmethod
+    def _align_by_DAPI(data_1, data_2, channel_index=0, upsample_factor=2, return_offsets = False):
+        """Align the second image to the first, using the channel at position 
+        `channel_index`. If channel_index is a tuple of length 2, specifies channels of [data_1,data_2] 
+        to use for alignment.The first channel is usually DAPI.
+        """
+        if isinstance(channel_index,tuple):
+        	assert len(channel_index)==2, 'channel_index must either by an integer or tuple of length 2'
+        	channel_index_1,channel_index_2 = channel_index
+        else:
+        	channel_index_1,channel_index_2 = (channel_index,)*2
+
+        images = data_1[channel_index_1], data_2[channel_index_2]
+        _, offset = ops.process.Align.calculate_offsets(images, upsample_factor=upsample_factor)
+        offsets = [offset] * len(data_2)
+        aligned = ops.process.Align.apply_offsets(data_2, offsets)
+        
+        if return_offsets:
+            return aligned, offsets
+        else:
+            return aligned
     
     @staticmethod
     def _prepare_cellpose(data, dapi_index, cyto_index, logscale=True, log_kwargs=dict()):
@@ -669,7 +690,7 @@ class Snake_sbs:
 
 
     @staticmethod
-    def _call_cells(df_reads, df_pool=None, q_min=0):
+    def _call_cells(df_reads, df_pool=None, q_min=0, barcode_col='sgRNA', **kwargs):
         """Perform median correction independently for each tile.
 
         Args:
@@ -697,13 +718,13 @@ class Snake_sbs:
             prefix_length = len(df_reads.iloc[0].barcode)
 
             # Add prefix to the pool DataFrame
-            df_pool[PREFIX] = df_pool.apply(lambda x: x.sgRNA[:prefix_length], axis=1)
+            df_pool[PREFIX] = df_pool.apply(lambda x: x[barcode_col][:prefix_length], axis=1)
 
             # Filter reads by quality threshold and call cells mapping
             return (
                 df_reads
                 .query('Q_min >= @q_min')
-                .pipe(ops.in_situ.call_cells_mapping, df_pool)
+                .pipe(ops.in_situ.call_cells_mapping, df_pool, **kwargs)
             )
 
 
@@ -789,7 +810,8 @@ class Snake_sbs:
         return annotated
 
     @staticmethod
-    def _annotate_bases_on_SBS_reads_peaks(log, peaks, df_reads, barcode_table, sbs_cycles, shape=(1024, 1024), return_channels="both"):
+    def _annotate_bases_on_SBS_reads_peaks(log, peaks, df_reads, barcode_table, sbs_cycles, shape=(1024, 1024), return_channels="both",
+                                          label_col='sgRNA'):
         """
         Annotate additional features on Single Base Sequencing (SBS) data.
 
@@ -813,7 +835,7 @@ class Snake_sbs:
         # Define a lambda function to extract prefixes from barcodes
         barcode_to_prefix = lambda x: ''.join(x[c - 1] for c in sbs_cycles)
         # Extract prefixes from barcodes
-        barcodes = [barcode_to_prefix(x) for x in barcode_table['sgRNA']]
+        barcodes = [barcode_to_prefix(x) for x in barcode_table[label_col]]
 
         # Mark reads as mapped or unmapped based on barcodes
         df_reads['mapped'] = df_reads['barcode'].isin(barcodes)

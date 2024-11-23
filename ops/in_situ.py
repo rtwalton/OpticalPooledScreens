@@ -175,18 +175,17 @@ def call_cells(df_reads):
       .query('cell > 0') # remove reads not in a cell
     )
     
-def call_cells_mapping(df_reads, df_pool):
+def call_cells_mapping(df_reads, df_pool, barcode_info_cols = [SGRNA, GENE_SYMBOL, GENE_ID]):
     """Determine the count of top barcodes, with prioritization given to barcodes mapping to the given pool design.
     
     Args:
         df_reads (DataFrame): DataFrame containing read data.
         df_pool (DataFrame): DataFrame containing pool design information.
-    
+        barcode_info_cols = [SGRNA, GENE_SYMBOL, GENE_ID] : Columns related to barcode information
     Returns:
         DataFrame: DataFrame containing the count of top barcodes along with merged guide information.
     """
-    # Columns related to guide information
-    guide_info_cols = [SGRNA, GENE_SYMBOL, GENE_ID]
+
 
     # Map reads to the pool design
     df_mapped = (
@@ -229,14 +228,14 @@ def call_cells_mapping(df_reads, df_pool):
 
     # Merge guide information for barcode 0
     df_cells = (
-        pd.merge(df_cells, df_pool[[PREFIX] + guide_info_cols], how='left', left_on=BARCODE_0, right_on=PREFIX)
-        .rename({col: col + '_0' for col in guide_info_cols}, axis=1)  # Rename columns for clarity
+        pd.merge(df_cells, df_pool[[PREFIX] + barcode_info_cols], how='left', left_on=BARCODE_0, right_on=PREFIX)
+        .rename({col: col + '_0' for col in barcode_info_cols}, axis=1)  # Rename columns for clarity
         .drop(PREFIX, axis=1)  # Drop the temporary prefix column
     )
     # Merge guide information for barcode 1
     df_cells = (
-        pd.merge(df_cells, df_pool[[PREFIX] + guide_info_cols], how='left', left_on=BARCODE_1, right_on=PREFIX)
-        .rename({col: col + '_1' for col in guide_info_cols}, axis=1)  # Rename columns for clarity
+        pd.merge(df_cells, df_pool[[PREFIX] + barcode_info_cols], how='left', left_on=BARCODE_1, right_on=PREFIX)
+        .rename({col: col + '_1' for col in barcode_info_cols}, axis=1)  # Rename columns for clarity
         .drop(PREFIX, axis=1)  # Drop the temporary prefix column
     )
 

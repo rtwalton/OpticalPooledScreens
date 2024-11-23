@@ -86,7 +86,9 @@ def segment_cellpose(dapi, cyto, nuclei_diameter, cell_diameter, gpu=False,
 
 def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False, 
                          cyto_model='cyto', reconcile='consensus', logscale=True,
-                         remove_edges=True, return_counts=False):
+                         remove_edges=True, return_counts=False, 
+                         flow_threshold_cell=0.4, cellprob_threshold_cell=0,
+                         flow_threshold_nucleus=0.4, cellprob_threshold_nucleus=0):
     """
     Segment nuclei and cells using the Cellpose algorithm from an RGB image.
     Parameters:
@@ -112,8 +114,12 @@ def segment_cellpose_rgb(rgb, nuclei_diameter, cell_diameter, gpu=False,
     counts = {}
     
     # Segment nuclei and cells using Cellpose from the RGB image
-    nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter)
-    cells, _, _, _ = model_cyto.eval(rgb, channels=[2, 3], diameter=cell_diameter)
+    nuclei, _, _, _ = model_dapi.eval(rgb, channels=[3, 0], diameter=nuclei_diameter,
+                                      flow_threshold=flow_threshold_nucleus, 
+                                      cellprob_threshold = cellprob_threshold_nucleus)
+    cells, _, _, _ = model_cyto.eval(rgb, channels=[2, 3], diameter=cell_diameter,
+                                      flow_threshold=flow_threshold_cell, 
+                                      cellprob_threshold = cellprob_threshold_cell)
     
     counts['initial_nuclei'] = len(np.unique(nuclei)) - 1  # Subtract 1 to exclude background
     counts['initial_cells'] = len(np.unique(cells)) - 1

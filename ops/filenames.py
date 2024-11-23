@@ -143,6 +143,8 @@ def name_file(description, **more_description):
     # Construct the first part of the filename based on magnification and cycle (if present)
     if 'cycle' in d:
         d['first'] = '{mag}_{cycle}_{well}'.format(**d)
+    elif 'ph_round' in d:
+        d['first'] = '{mag}_{ph_round}_{well}'.format(**d)
     else:
         d['first'] = '{mag}_{well}'.format(**d)
 
