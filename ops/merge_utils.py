@@ -217,13 +217,13 @@ def check_matching_rates(orig_data, merged_data, modality='sbs', return_stats=Fa
     else:
         merge_cols = ['well', 'tile', 'cell_0']
         rename_dict = {'cell': 'cell_0'}
-    
+        
     # Prepare and merge data
     checking_df = (orig_data
         .rename(columns=rename_dict)
         .drop(columns=['i', 'j'])
         .merge(merged_data, how='left', on=merge_cols))
-    
+
     # Calculate matching rates per well
     rates = []
     print(f"\nFinal matching rates for {modality.upper()} cells:")

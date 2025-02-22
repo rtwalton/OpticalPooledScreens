@@ -222,7 +222,7 @@ def grouped_standardization(df, population_feature='gene_symbol_0', control_pref
 
     return df_out.reset_index()
 
-def add_filenames(df, base_ph_file_path=None, multichannel_dict=None, subset=False):
+def add_filenames(df, base_ph_file_path=None, multichannel_dict=None, subset=False, corrected=False):
     """
     Add filename columns to DataFrame for single or multiple channels.
     
@@ -249,6 +249,8 @@ def add_filenames(df, base_ph_file_path=None, multichannel_dict=None, subset=Fal
         if channel_suffix:
             # Multichannel format
             return f"{base_ph_file_path}/{base}.phenotype.{channel_suffix}"
+        elif corrected:
+            return f"{base_ph_file_path}/{base}.corrected.tif"
         else:
             # Single channel format
             return f"{base_ph_file_path}/{base}.phenotype.tif"

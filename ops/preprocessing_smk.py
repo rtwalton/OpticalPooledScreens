@@ -7,6 +7,7 @@ import numpy as np
 import re
 from nd2reader import ND2Reader
 import ops.filenames
+from natsort import natsorted
 
 class Snake_preprocessing:
     @staticmethod
@@ -131,6 +132,10 @@ class Snake_preprocessing:
             if 'z' in images.axes:
                 print("There is a z dimension")
                 axes = 'zcyx'
+            
+            # single channel images will not have 'c' channel axis
+            if 'c' not in images.axes:
+                axes = axes.replace('c','')
 
             images.bundle_axes = axes
             
@@ -151,6 +156,33 @@ class Snake_preprocessing:
             print(f"Final image shape: {image_array.shape}")
 
         return image_array, file_description
+
+    @staticmethod
+    def _convert_to_tif_tile_stack(files, **kwargs):
+        """
+        Converts a multiple ND2 files for one field of view and one or more channel each to a multidimensional numpy array.
+        """
+    
+        for i, file in enumerate(natsorted(files)):
+            
+            image_array, file_description = Snake_preprocessing._convert_to_tif_tile(file, **kwargs)
+    
+            # check dimensions
+            if image_array.ndim == 2:
+                image_array = np.expand_dims(image_array, axis=0)
+            if image_array.ndim == 3:
+                pass
+            else:
+                raise ValueError("Data must have 2 or 3 dimensions")
+    
+            if i==0:
+                description = file_description
+                image_stack = image_array
+            else:
+                image_stack = np.concatenate([image_stack, image_array], axis=0)
+        
+        print(f"Final stacked image shape: {image_stack.shape}")
+        return image_stack, description
     
     @staticmethod
     def _convert_to_tif_well(file, channel_order_flip=False, parse_function_home=None, parse_function_dataset=None, parse_function_tiles=False, parse_function_channels=True, separate_dapi=True):
@@ -401,7 +433,14 @@ def extract_tile(full_filename):
     # one is Points{well}_{tile}_Channel
     match = re.search('Point[A-Z]\d{1,4}_(?P<tile>\d*)_Channel', short_fname)
     if match is not None:
-        seq = str(match.groupdict()['tile'])
+        
+        # Extract the sequence and remove leading zeros
+        seq = str(match.groupdict()['tile']).lstrip('0')
+        
+        # If all zeros were removed, return '0'
+        if seq == '':
+            seq = '0'
+            
         return seq
     
     # Another format is 'Points-'

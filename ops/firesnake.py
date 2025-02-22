@@ -209,7 +209,7 @@ class Snake():
         return aligned
 
     @staticmethod
-    def _align_by_DAPI(data_1, data_2, channel_index=0, upsample_factor=2):
+    def _align_by_DAPI(data_1, data_2, channel_index=0, upsample_factor=2, return_offsets = False):
         """
         Align the second image to the first, using the channel at position `channel_index`.
         If `channel_index` is a tuple of length 2, specifies channels of [data_1, data_2] 
@@ -250,8 +250,98 @@ class Snake():
         offsets = [offset] * len(data_2)
         aligned = ops.process.Align.apply_offsets(data_2, offsets)
 
-        return aligned
+        if return_offsets:
+            return aligned, offsets
+        else:
+            return aligned
+
+    @staticmethod
+    def _align_and_stack_phenotype_rounds(data, segment_round, align_channels, upsample_factor=2, drop_extra_align_channels=False):
+        """
+        Align and stack mulitple rounds of phenotyping.
+
+        Args:
+            data (list): List of np.ndarray. Each entry is a phenotyping round that will be aligned and stacked into a single final image.
+            segment_round (int): Index of the phenotyping round that will serve as the alignment reference.
+            align_channels (list): List where each element is the index of the channel to be used for alingment in each round, in order.
+            upsample_factor (int): Factor to upsample the alignment process.
+            drop_extra_align_channels (bool): Remove the channel used for alignment from all rounds but the first. Default is False.
+
+        Returns:
+            np.ndarray: All phenotyping rounds aligned and all channels stacked along the channel axis.
+        
+        """
+        assert len(data) == len(align_channels), 'number of images passed must match number of channels for alignment'    
+
+        aligned_images = []
+        for i, img in enumerate(data):
+            # no alignment for segmentation image
+            if i == segment_round:
+                if (drop_extra_align_channels) & (i!=0) :
+                    #drop alignment channel
+                    aligned_image = np.delete(img, align_channels[i], axis=0)
+                aligned_images.append(aligned_image)
+            else:
+                # get get alignment channels from segmentation round and current round
+                images = data[segment_round][align_channels[segment_round]], img[align_channels[i]]
+
+                # Calculate the offsets needed to align data_2 to data_1
+                _, offset = ops.process.Align.calculate_offsets(images, upsample_factor=upsample_factor)
+
+                # Apply the calculated offsets to data_2
+                offsets = [offset] * len(img)
+                image_align = ops.process.Align.apply_offsets(img, offsets)
+
+                if (drop_extra_align_channels) & (i!=0) :
+                    #drop alignment channel                    
+                    image_align = np.delete(image_align, align_channels[i], axis=0)
+                
+                aligned_images.append(image_align)
+        
+        # concatenate along channel axis
+        return np.concatenate(aligned_images, axis=0)
+
+    @staticmethod
+    def _apply_custom_offsets(data, offset_yx, channels):
+        """
+        Applies a custom offset to the channels. Example use case is aligning a channel that has a systematic
+        offset versus others due to lightpath/optical configuration differences (e.g. far red channel like AF750 
+        imaged without a PFS dichroic that is used for other channels).
+        
+        Parameters
+        ----------
+        data : np.ndarray
+            The image data to be adjusted.
+        offset_yx: list or tuple, dtype=np.float64, of length 2, specifying offsets for y and x as (y,x)
+            #specifies (y, x) pixel offset for each channel.
+            #Will be applied to the specified channels
     
+        #TO SHIFT LEFT: +x
+        #TO SHIFT RIGHT: -x
+        #TO SHIFT UP: +y
+        #TO SHIFT DOWN: -y
+
+        channels: list or tuple, dtype=int, with the indices of the channels to which the offset will be applied.
+    
+        Returns
+        -------
+        adjusted : np.ndarray
+            The adjusted version of `data`.
+        """
+        # set up offsets
+        offsets = np.array([(0,0) for i in range(data.shape[0])])
+        if isinstance(channels, int):
+            offsets[[channels]] = offset_yx
+        elif isinstance(channels, list):
+            offsets[channels] = offset_yx
+        else:
+            raise ValueError("'channels' must be an int or tuple/list of ints")
+
+        # Apply the calculated offsets to data
+        adjusted = ops.process.Align.apply_offsets(data, offsets)
+        
+        return adjusted
+            
     @staticmethod
     def _align_phenotype_channels(data, target, source, riders=[], upsample_factor=2, window=2, remove=False):
         """
@@ -803,7 +893,8 @@ class Snake():
         cyto = data[cyto_index]
 
         # Create a blank array with the same shape as the DAPI channel
-        blank = np.zeros_like(dapi)
+        # blank = np.zeros_like(dapi)
+        blank = np.zeros_like(dapi, dtype='uint8')
 
         # Apply log scaling to the cytoplasmic channel if specified
         if logscale:
@@ -1174,14 +1265,14 @@ class Snake():
 
 
     @staticmethod
-    def _call_cells(df_reads, df_pool=None, q_min=0):
+    def _call_cells(df_reads, df_pool=None, q_min=0, barcode_col='sgRNA', **kwargs):
         """Perform median correction independently for each tile.
 
         Args:
             df_reads (DataFrame): DataFrame containing read information.
             df_pool (DataFrame, optional): DataFrame containing pool information. Default is None.
             q_min (int, optional): Minimum quality threshold. Default is 0.
-
+            barcode_col (str, optional): Column in df_pool with barcodes. Default is 'sgRNA' (e.g. CROPseq)
         Returns:
             DataFrame: DataFrame containing corrected cells.
         """
@@ -1195,22 +1286,44 @@ class Snake():
             return (
                 df_reads
                 .query('Q_min >= @q_min')
-                .pipe(ops.in_situ.call_cells)
+                .pipe(ops.in_situ.call_cells, **kwargs)
             )
         else:
             # Determine the experimental prefix length
             prefix_length = len(df_reads.iloc[0].barcode)
 
             # Add prefix to the pool DataFrame
-            df_pool[PREFIX] = df_pool.apply(lambda x: x.sgRNA[:prefix_length], axis=1)
+            df_pool[PREFIX] = df_pool.apply(lambda x: x[barcode_col][:prefix_length], axis=1)
 
             # Filter reads by quality threshold and call cells mapping
             return (
                 df_reads
                 .query('Q_min >= @q_min')
-                .pipe(ops.in_situ.call_cells_mapping, df_pool)
+                .pipe(ops.in_situ.call_cells_mapping, df_pool, **kwargs)
             )
 
+    @staticmethod
+    def _call_cells_T7(df_reads, q_min=0, **kwargs):
+        """Perform median correction independently for each tile.
+
+        Args:
+            df_reads (DataFrame): DataFrame containing read information.
+            df_pool (DataFrame, optional): DataFrame containing pool information. Default is None.
+            q_min (int, optional): Minimum quality threshold. Default is 0.
+            barcode_col (str, optional): Column in df_pool with barcodes. Default is 'sgRNA' (e.g. CROPseq)
+        Returns:
+            DataFrame: DataFrame containing corrected cells.
+        """
+        # Check if df_reads is None and return if so
+        if df_reads is None:
+            return
+
+        return (
+                df_reads
+                .query('Q_min >= @q_min')
+                .pipe(ops.in_situ.call_cells_T7, **kwargs)
+            )
+      
 
     # ANNOTATE FUNCTIONS
 
@@ -2190,6 +2303,12 @@ class Snake():
         Returns:
         - pandas.DataFrame: DataFrame containing extracted phenotype features.
         """
+
+        # check that masks are not empty
+        if ~np.any(cells) or ~np.any(cells):
+            print("no cells!")
+            return pd.DataFrame()
+            
         # Check if all channels should be used
         if nucleus_channels == 'all':
             try:
@@ -2240,7 +2359,12 @@ class Snake():
         cell_columns = make_column_map(cell_channels)
 
         # Extract nucleus features
-        dfs.append(Snake._extract_features(data_phenotype[..., nucleus_channels, :, :], nuclei, wildcards, features, multichannel=True)
+        dfs.append(Snake._extract_features(
+			data_phenotype[..., nucleus_channels, :, :], 
+			nuclei, 
+			wildcards, 
+			features, 
+			multichannel=True)
                    .rename(columns=nucleus_columns)
                    .set_index('label')
                    .rename(columns=lambda x: 'nucleus_'+x if x not in wildcards.keys() else x)
@@ -2366,6 +2490,9 @@ class Snake():
             pandas.DataFrame: Merged dataframe.
         """
         # Import necessary modules
+        if (df_0 is None) or (df_1 is None):
+            return None
+        
         import ops.triangle_hash as th
 
         # Rename 'tile' column to 'site' in df_1

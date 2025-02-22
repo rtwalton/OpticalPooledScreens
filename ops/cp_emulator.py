@@ -19,6 +19,7 @@ It includes functions for:
 """
 
 import numpy as np
+import pandas as pd
 from scipy.stats import median_abs_deviation, rankdata # new in version 1.3.0
 from scipy.spatial.distance import pdist
 from scipy.ndimage.morphology import distance_transform_edt as distance_transform
@@ -352,7 +353,7 @@ def neighbor_measurements(labeled, distances=[1,10],n_cpu=1):
 	from pandas import concat
 
 	dfs = [object_neighbors(labeled,distance=distance).rename(columns=lambda x: x+'_'+str(distance)) for distance in distances]
-
+    
 	dfs.append(closest_objects(labeled,n_cpu=n_cpu).drop(columns=['first_neighbor','second_neighbor']))
 
 	return concat(dfs,axis=1,join='outer').reset_index()
@@ -851,8 +852,16 @@ def closest_objects(labeled,n_cpu=1):
     'j'       : lambda r: r.centroid[1],
     'label'   : lambda r: r.label
     }
-	
+
 	df = feature_table(labeled,labeled,features)
+	if (np.max(labeled) < 3):
+		# not enough objects to detect first and second neighbors
+		df['first_neighbor'] = np.nan
+		df['first_neighbor_distance'] = np.nan
+		df['second_neighbor'] = np.nan
+		df['second_neighbor_distance'] = np.nan
+		df['angle_between_neighbors'] = np.nan
+		return df
 
 	kdt = cKDTree(df[['i','j']])
 
