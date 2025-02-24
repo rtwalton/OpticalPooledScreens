@@ -125,6 +125,66 @@ def do_median_call(df_bases, cycles=12, channels=4, correction_quartile=0, corre
 
     return df_reads
 
+def do_percentile_call(df_bases, cycles=12, channels=4, correction_only_in_cells=False, imaging_order='GTAC'):
+    """
+    Call reads from raw base signal using median correction. Use the
+    `correction_within_cells` flag to specify if correction is based on reads within
+    cells, or all reads.
+    """
+    #print(imaging_order)
+    #print('nchannels ', channels)
+    if correction_only_in_cells:
+        # first obtain transformation matrix W
+        X_ = dataframe_to_values(df_bases.query('cell > 0')) #seems to be superfluous arg, channels=channels)
+        _, W = transform_percentiles(X_.reshape(-1, channels))
+
+        # then apply to all data
+        X = dataframe_to_values(df_bases) #superflous? , channels=channels)
+        Y = W.dot(X.reshape(-1, channels).T).T.astype(int)
+    else:
+        X = dataframe_to_values(df_bases) #superflous? , channels=channels)
+        Y, W = transform_percentiles(X.reshape(-1, channels))
+        print(Y,Y.shape,X.shape,X)
+    df_reads = call_barcodes(df_bases, Y, cycles=cycles, channels=channels)
+
+    return df_reads
+
+def transform_percentiles(X):
+    """
+    For each dimension, find points where that dimension is >=98th percentile intensity. Use median of those points to define new axes.
+    Describe with linear transformation W so that W * X = Y.
+    EDITED TO 95th percentile
+    """
+
+    def get_percentiles(X):
+        arr = []
+        for i in range(X.shape[1]):
+            # print(X[:,i:i+1].shape)
+            # print(X.shape)
+            rowsums=np.sum(X,axis=1)[:,np.newaxis]
+            X_rel = (X/rowsums)
+            perc = np.nanpercentile(X_rel[:,i],95) #98)
+            print(perc)
+            high = X[X_rel[:,i] >= perc]
+            print()
+            #print(a.shape)
+            #print((X/a)[0:2,:])
+            #print((X[:,i:i+1]/(X+1e-6))[0:2,:])
+            arr += [np.median(high, axis = 0)]
+            #print(arr)
+        M = np.array(arr)
+        print(M)
+        return M
+
+    M = get_percentiles(X).T
+    print(X)
+    print(M)
+    print(M.shape)
+    M = M / M.sum(axis=0)
+    W = np.linalg.inv(M)
+    Y = W.dot(X.T).T.astype(int)
+    return Y, W
+
 def clean_up_bases(df_bases):
     """
     Sort DataFrame df_bases for pre-processing before dataframe_to_values.
@@ -275,7 +335,7 @@ def call_cells_T7(
     map_col = 'prefix_map', 
     recomb_col = None,
     recomb_filter_col = None,
-    recomb_q_thresh = 0.5,
+    recomb_q_thresh = 0.1,
     error_correct=False,
     barcode_info_cols = [GENE_SYMBOL],
     **kwargs

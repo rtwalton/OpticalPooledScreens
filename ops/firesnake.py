@@ -727,7 +727,7 @@ class Snake():
 
     @staticmethod
     def _segment_cell_2019(data, nuclei_threshold, nuclei_area_min,
-                           nuclei_area_max, cell_threshold):
+                           nuclei_area_max, cell_threshold, cells=True):
         """
         Combine morphological segmentation of nuclei and cells to have the same interface as _segment_cellpose.
 
@@ -744,16 +744,20 @@ class Snake():
                 - cells (numpy.ndarray): Labeled segmentation mask of cell boundaries.
         """
         # If SBS data, image will have 4 dimensions
+        
         if data.ndim == 4:
             # Select first cycle
             nuclei_data = data[0]
-
+        elif data.ndim == 3:
+            nuclei_data = data
         # Segment nuclei using the _segment_nuclei method
         nuclei = Snake._segment_nuclei(nuclei_data, nuclei_threshold, nuclei_area_min, nuclei_area_max)
         
+        if not cells:
+            return nuclei
+        
         # Segment cells using the _segment_cells method
         cells = Snake._segment_cells(data, nuclei, cell_threshold)
-        
         return nuclei, cells
     
     @staticmethod
@@ -893,7 +897,6 @@ class Snake():
         cyto = data[cyto_index]
 
         # Create a blank array with the same shape as the DAPI channel
-        # blank = np.zeros_like(dapi)
         blank = np.zeros_like(dapi, dtype='uint8')
 
         # Apply log scaling to the cytoplasmic channel if specified
@@ -1198,6 +1201,40 @@ class Snake():
         # Extract bases using maximum filtered data
         return Snake._extract_bases(maxed, peaks, cells, bases=['-'], threshold_peaks=threshold_peaks, wildcards=wildcards)
     
+    @staticmethod
+    def _call_reads_percentiles(df_bases, peaks=None, correction_only_in_cells=True, imaging_order='GTAC'):
+        #print(imaging_order)
+        """
+        ALTERNATIVE TO _call_reads built by Becca+Anna.
+        Uses in_situ functions: do_percentile_call, transform_percentiles
+        Median correction performed independently for each tile.
+        Use the `correction_only_in_cells` flag to specify if correction
+        is based on reads within cells, or all reads.
+        """
+        if df_bases is None:
+            print('error -- df_bases is none')
+            return
+        if correction_only_in_cells:
+            if len(df_bases.query('cell > 0')) == 0:
+                print('error -- no cells in df_bases')
+                return
+
+        cycles = len(set(df_bases['cycle']))
+        channels = len(set(df_bases['channel']))
+
+        df_reads = (df_bases
+                    .pipe(ops.in_situ.clean_up_bases)
+                    .pipe(ops.in_situ.do_percentile_call, cycles=cycles, channels=channels,
+                          imaging_order=imaging_order, correction_only_in_cells=correction_only_in_cells)
+                    )
+
+        if peaks is not None:
+            i, j = df_reads[['i', 'j']].values.T
+            df_reads['peak'] = peaks[i, j]
+
+        return df_reads
+
+
     @staticmethod
     def _call_reads(df_bases, peaks=None, correction_only_in_cells=True, normalize_bases=True):
         """
